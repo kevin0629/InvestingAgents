@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+
+core/build/
+
+.vscode/
+
+# test file
+/tests
+
+# Outputfiles
+OutputFile/
