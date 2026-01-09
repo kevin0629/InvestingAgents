@@ -3,7 +3,9 @@ __pycache__/
 
 core/build/
 
-.vscode/
+.vscode
+
+.venv
 
 # test file
 /tests

@@ -4,6 +4,7 @@ from src.models import Taiex, Stock, Company, Factor, FactorValue
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy import select
 from datetime import date
+from typing import AsyncGenerator
 import asyncio
 from src.config import Config
 
@@ -153,9 +154,14 @@ class Database:
             await self._engine.dispose()
 
 
-async def main():
-    db = Database()
+db = Database()
 
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    async with db.async_session() as session:
+        yield session
+
+
+async def main():
     # 取得公司的開高低收、市值、本益比、beta(stock)
     stock_df = await db.get_daily_stock()
     filtered_df = stock_df[stock_df["company_symbol"] == "3491"]
