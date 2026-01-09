@@ -6,18 +6,17 @@ from src.database import get_db
 
 router = APIRouter(prefix="/company", tags=["company"])
 
-def get_company_service(session: AsyncSession = Depends(get_db)) -> CompanyService:
-    return CompanyService(session)
-
 @router.get("/", response_model=CompanyListResponse)
-async def get_companys(service: CompanyService = Depends(get_company_service)):
+async def get_companys(db: AsyncSession = Depends(get_db)):
+    service = CompanyService(db)
     data = await service.get_all_companies()
     
     return CompanyListResponse(companies_data=data)
 
 
 @router.get("/{company_symbol}", response_model=CompanyResponse)
-async def get_company(company_symbol: str, service: CompanyService = Depends(get_company_service)):
+async def get_company(company_symbol: str, db: AsyncSession = Depends(get_db)):
+    service = CompanyService(db)
     data = await service.get_company_by_symbol(company_symbol)
     if not data:
         raise HTTPException(status_code=404, detail="Company not found")

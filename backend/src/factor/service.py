@@ -11,7 +11,7 @@ class FactorService:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_company_all_factors(self, company_symbol: str, end_date: str = None, num: int = 4) -> List[FactorValue]:
+    async def get_company_all_factors(self, company_symbol: str, end_date: str = None, num: int = 4):
         if end_date is None:
             end_date = datetime.now(tz=ZoneInfo("Asia/Taipei")).date().isoformat()
         
@@ -26,20 +26,19 @@ class FactorService:
         stmt = (
             select(
                 FactorValue.date,
+                FactorValue.release_date,
                 Factor.factor_name,
-                # Factor.factor_formula,
                 FactorValue.factor_value,
             )
             .join(Factor, FactorValue.factor_id == Factor.id)
             .where(FactorValue.company_id == company.id)
-            .where(FactorValue.date > end_date - relativedelta(months=num*3))
-            .where(FactorValue.date <= end_date)
+            .where(FactorValue.release_date > end_date - relativedelta(months=num*3))
+            .where(FactorValue.release_date <= end_date)
             .order_by(FactorValue.date.desc())
         )
         result = await self.session.execute(stmt)
         rows = result.all()
         data = await self.aggregated(rows, groups=["quarter", "month"])
-        print(f"Start Date:{end_date - relativedelta(months=num*3)}, End Date:{end_date}")
 
         return data
 
@@ -61,14 +60,14 @@ class FactorService:
 
         for row in rows:
             date = row[0]
-            # period = row[1]  # not used for grouping keys here
-            factor_name = row[1]
-            factor_value = row[2]
+            release_date = row[1]
+            factor_name = row[2]
+            factor_value = row[3]
 
             # compute keys
             year_key = f"{date.year}"
             quarter_key = f"{date.year}Q{((date.month - 1) // 3 + 1)}"
-            month_key = date.strftime("%Y/%m")
+            month_key = release_date.strftime("%Y/%m")
 
             if "year" in containers:
                 containers["year"][factor_name][year_key].append(factor_value)
@@ -94,15 +93,15 @@ class FactorService:
         stmt = (
             select(
                 FactorValue.date,
+                FactorValue.release_date,
                 Factor.factor_name,
-                # Factor.factor_formula,
                 FactorValue.factor_value,
             )
             .join(Factor, FactorValue.factor_id == Factor.id)
             .where(FactorValue.company_id == company.id)
             .where(Factor.factor_name == factor_name)
-            .where(FactorValue.date > end_date - relativedelta(months=num*3))
-            .where(FactorValue.date <= end_date)
+            .where(FactorValue.release_date > end_date - relativedelta(months=num*3))
+            .where(FactorValue.release_date <= end_date)
             .order_by(FactorValue.date.desc())
         )
         result = await self.session.execute(stmt)

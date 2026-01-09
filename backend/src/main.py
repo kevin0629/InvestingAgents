@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.config import Config
 from src.company.router import router as company_router
 from src.factor.router import router as factor_router
-
+from src.indicator.router import router as indicator_router
 
 config = Config()
 
@@ -19,6 +19,7 @@ app.add_middleware(
 
 app.include_router(company_router)
 app.include_router(factor_router)
+app.include_router(indicator_router)
 
 @app.get("/")
 async def root():

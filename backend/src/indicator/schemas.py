@@ -1,14 +1,29 @@
 from pydantic import BaseModel, Field
-
-class FinancialData(BaseModel):
-    """財務指標模型"""
-    report_period: str = Field(..., description="資料日期")
-    factor: float = Field(..., description="財務指標值")
+from typing import Dict, List
 
 
-class FinancialDataResponse(BaseModel):
-    """財務指標回應"""
-    financial_data: list[FinancialData] = Field(..., description="財務指標資料列表")
+class IndicatorResponse(BaseModel):
+    """
+    因子資料回應
+    結構: 群組(quarter/month) -> 因子名稱 -> 時間區段 -> 數值列表
+    """
+    data: Dict[str, Dict[str, Dict[str, List[float]]]] = Field(
+        ..., 
+        description="分組後的因子資料",
+        example={
+            "quarter": {
+                "現金及約當現金": {
+                    "2023Q1": [15.5],
+                    "2023Q2": [16.2]
+                }
+            },
+            "month": {
+                "當月營收": {
+                    "2023/01": [1000.0]
+                }
+            }
+        }
+    )
 
 
 class DuPontAnalysisResponse(BaseModel):
