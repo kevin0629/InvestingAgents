@@ -22,7 +22,7 @@ class IndicatorService:
         company = result.scalars().first()
         
         if not company:
-            return []
+            return {}
         
         stmt = (
             select(
@@ -89,7 +89,7 @@ class IndicatorService:
         company = result.scalars().first()
         
         if not company:
-            return []
+            return {}
         
         stmt = (
             select(
@@ -109,7 +109,7 @@ class IndicatorService:
         rows = result.all()
 
         if not rows:
-            return []
+            return {}
         
         groups = []
         if indicator_name == "當月營收":
@@ -120,3 +120,32 @@ class IndicatorService:
         data = await self.aggregated(rows, groups=groups)
 
         return data
+    
+
+    async def dupont_analysis(self, company_symbol: str, end_date: str = None, num: int = 4):
+        if end_date is None:
+            end_date = datetime.now(tz=ZoneInfo("Asia/Taipei")).date().isoformat()
+        
+        end_date = datetime.fromisoformat(end_date)
+        stmt = select(Company).where(Company.symbol == company_symbol)
+        result = await self.session.execute(stmt)
+        company = result.scalars().first()
+
+        if not company:
+            return {}
+        
+        indicatorList = [""]
+        stmt = (
+            select(
+                FinancialReportIndicatorValue.date,
+                FinancialReportIndicatorValue.release_date,
+                SingleIndicator.tw_indicator,
+                FinancialReportIndicatorValue.indicator_value,
+            )
+            .join(SingleIndicator, FinancialReportIndicatorValue.indicator_id == SingleIndicator.id)
+            .where(FinancialReportIndicatorValue.company_id == company.id)
+            .where(SingleIndicator.tw_indicator == indicator_name)
+            .where(FinancialReportIndicatorValue.release_date > end_date - relativedelta(months=num*3))
+            .where(FinancialReportIndicatorValue.release_date <= end_date)
+            .order_by(FinancialReportIndicatorValue.date.desc())
+        )

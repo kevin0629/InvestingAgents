@@ -100,7 +100,7 @@ class FinancialReportIndicatorValue(Base):
     release_date = Column(Date, nullable=False)
     period_id = Column(Integer, ForeignKey('period.id'))
     indicator_id = Column(Integer, ForeignKey('singleindicator.id'))
-    indicator_value = Column(Integer)
+    indicator_value = Column(Float)
 
     company = relationship('Company', back_populates="financialReportIndicatorValue")
     period = relationship('Period', back_populates="financialReportIndicatorValue")

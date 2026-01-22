@@ -21,7 +21,7 @@ class FactorService:
         company = result.scalars().first()
         
         if not company:
-            return []
+            return {}
         
         stmt = (
             select(
@@ -88,7 +88,7 @@ class FactorService:
         company = result.scalars().first()
         
         if not company:
-            return []
+            return {}
         
         stmt = (
             select(
@@ -108,7 +108,7 @@ class FactorService:
         rows = result.all()
 
         if not rows:
-            return []
+            return {}
         
         groups = []
         if factor_name in ["MRYoY", "CRYoY"]:

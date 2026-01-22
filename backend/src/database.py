@@ -45,6 +45,39 @@ class Database:
         return self._session_maker()
 
 
+    # --- 同步 wrapper（方便同步呼叫）
+    def get_daily_stock_sync(self):
+        import asyncio
+        # If an event loop is already running (e.g. in Jupyter), try to patch with nest_asyncio
+        if asyncio.get_event_loop().is_running():
+            try:
+                import nest_asyncio
+                nest_asyncio.apply()
+            except Exception:
+                raise RuntimeError("Event loop is already running. Use 'await Database().get_daily_stock()' in async context or install 'nest_asyncio' to allow synchronous wrappers in notebooks.")
+        return asyncio.run(self.get_daily_stock())
+
+    def get_finance_report_sync(self):
+        import asyncio
+        if asyncio.get_event_loop().is_running():
+            try:
+                import nest_asyncio
+                nest_asyncio.apply()
+            except Exception:
+                raise RuntimeError("Event loop is already running. Use 'await Database().get_finance_report()' in async context or install 'nest_asyncio'.")
+        return asyncio.run(self.get_finance_report())
+
+    def get_taiex_data_sync(self):
+        import asyncio
+        if asyncio.get_event_loop().is_running():
+            try:
+                import nest_asyncio
+                nest_asyncio.apply()
+            except Exception:
+                raise RuntimeError("Event loop is already running. Use 'await Database().get_taiex_data()' in async context or install 'nest_asyncio'.")
+        return asyncio.run(self.get_taiex_data())
+
+
     # 取得公司的開高低收、市值、本益比、beta(stock)
     async def get_daily_stock(self):
         async with self.async_session() as session:
@@ -66,7 +99,6 @@ class Database:
                     )
                     .join(Company, Stock.company_id == Company.id)
                     .where(Company.exchange_name == 'TWSE')
-                    .where(Stock.date > date(2025, 1, 1))
                 )
 
                 result = await session.execute(stmt)
@@ -100,6 +132,7 @@ class Database:
                 stmt = (
                     select(
                         FactorValue.date,
+                        FactorValue.release_date,
                         Company.symbol.label("company_symbol"),
                         Factor.factor_name,
                         FactorValue.factor_value
@@ -107,13 +140,12 @@ class Database:
                     .join(Factor, FactorValue.factor_id == Factor.id)
                     .join(Company, FactorValue.company_id == Company.id)
                     .where(Company.exchange_name == 'TWSE')
-                    .where(FactorValue.date > date(2025, 1, 1))
                 )
 
                 result = await session.execute(stmt)
                 data = result.all()
                 
-                columns = ["date", "company_symbol", "factor_name", "factor_value"]
+                columns = ["date", "release_date", "company_symbol", "factor_name", "factor_value"]
                 df = CustomDataFrame(data, columns=columns)
                 return df
 
