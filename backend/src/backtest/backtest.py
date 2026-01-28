@@ -9,7 +9,7 @@ from pandas.tseries.frequencies import to_offset
 import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 
-import src.backtest.report
+from src.backtest import report
 from src.get_data import Data
 from core.backtest_core import backtest_, get_trade_stocks
 from core.backtest_core import mae_mfe as maemfe

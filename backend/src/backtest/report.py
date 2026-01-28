@@ -15,7 +15,8 @@ class Report():
             self.daily_benchmark = rebase(self.benchmark\
                 .dropna().reindex(self.stock_data.index, method='ffill') \
                 .ffill())
-        except:
+        except Exception as e:
+            print(f"無法建立 Benchmark: {e}")
             pass
 
     def display(self):

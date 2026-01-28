@@ -142,21 +142,22 @@ class Data:
             # 財報資料的Header為大寫
             item = item.upper().replace(" ", "")
             report_data = self.format_report_data(item)
-            # 財報資料日期調整
-            # adjusted_report_data = adjust_index_of_report(report_data)
+            # 財報資料調整
+            adjusted_report_data = adjust_index_of_report(report_data)
             # 處理財報資料缺漏植問題: ffill
-            for df in report_data.values():
+            for df in adjusted_report_data.values():
                 df.fillna(method="ffill", inplace=True)
             # return report_data
-            if len(report_data) == 1:
-                return next(iter(report_data.values()))
+            if len(adjusted_report_data) == 1:
+                return next(iter(adjusted_report_data.values()))
             
-            return report_data.values()
+            return adjusted_report_data.values()
 
         # EX. 想要取得台股加權指數(收盤價):
         # taiex_close = data.get("taiex: close")
         elif subject == "taiex":
-            self.raw_taiex_data.set_index("date", inplace=True)
+            if "date" in self.raw_taiex_data.columns:
+                self.raw_taiex_data.set_index("date", inplace=True)
             return self.raw_taiex_data[[item]]
 
         else:

@@ -47,7 +47,6 @@ class Database:
 
     # --- 同步 wrapper（方便同步呼叫）
     def get_daily_stock_sync(self):
-        import asyncio
         # If an event loop is already running (e.g. in Jupyter), try to patch with nest_asyncio
         if asyncio.get_event_loop().is_running():
             try:
@@ -58,7 +57,6 @@ class Database:
         return asyncio.run(self.get_daily_stock())
 
     def get_finance_report_sync(self):
-        import asyncio
         if asyncio.get_event_loop().is_running():
             try:
                 import nest_asyncio
@@ -68,7 +66,6 @@ class Database:
         return asyncio.run(self.get_finance_report())
 
     def get_taiex_data_sync(self):
-        import asyncio
         if asyncio.get_event_loop().is_running():
             try:
                 import nest_asyncio
@@ -165,7 +162,7 @@ class Database:
                     Taiex.close,
                     Taiex.volume,
                     Taiex.market_cap.label("market_capital"),
-                )
+                ).order_by(Taiex.date)
 
                 result = await session.execute(stmt)
                 data = result.all()

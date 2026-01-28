@@ -41,7 +41,10 @@ def format_report_data(raw_report_data, factor):
     factor_list = factor.split(",")
     dfs_by_id = {}
     for f in factor_list:
-        temp_df = raw_report_data[raw_report_data["factor_name"] == f].pivot(
+        # 使用不區分大小寫的方式比對 factor_name
+        # 因為 DB 裡可能是 MRYoY，但輸入可能被轉為 MRYOY
+        mask = raw_report_data["factor_name"].str.upper() == f.upper()
+        temp_df = raw_report_data[mask].pivot(
             index=["date", "release_date"], columns="company_symbol", values="factor_value"
         )
         dfs_by_id[f] = CustomDataFrame(temp_df)
@@ -140,6 +143,59 @@ def get_number_of_indicator_return(indname, tmp_company_daily_price):
         # print("回傳數量: ",1)
         return 1
 
+def adjust_index_of_report(df_dict):
+    """
+    根據索引日期調整財報資料字典中所有 DataFrame 的資料。
+    
+    參數：
+    df_dict (dict[str, pd.DataFrame])：多個因子的資料字典。
+
+    返回：
+    dict[str, pd.DataFrame]：索引調整後的資料字典。
+    """
+    
+    adjusted_dict = {}
+
+    for factor, df in df_dict.items():
+        # 複製一份以免修改到原始資料
+        temp_df = df.copy()
+
+        # 處理 Index，確保 date 和 release_date 變成 column
+        # 預期輸入可能是 MultiIndex ['date', 'release_date']
+        if isinstance(temp_df.index, pd.MultiIndex):
+            temp_df = temp_df.reset_index()
+        elif 'date' in temp_df.index.names and 'release_date' in temp_df.index.names:
+             temp_df = temp_df.reset_index()
+
+        # 確保需要的欄位存在才處理
+        if 'date' in temp_df.columns and 'release_date' in temp_df.columns:
+            temp_df['date'] = pd.to_datetime(temp_df['date'])
+            temp_df['release_date'] = pd.to_datetime(temp_df['release_date'])
+
+            # 1. 若 release_date 某日的值不是唯一，僅保留 date 較後面的資料
+            temp_df = temp_df.sort_values(by=['release_date', 'date'])
+            temp_df = temp_df.drop_duplicates(subset=['release_date'], keep='last')
+
+            # 2. 針對 release_date 做觀察，每月如果有更早的日期都要被替換為該月日期最大的 release_date
+            # 新增輔助欄位：月份
+            temp_df['month_group'] = temp_df['release_date'].dt.to_period('M')
+            # 找出每個月的最大 release_date
+            monthly_max_dates = temp_df.groupby('month_group')['release_date'].transform('max')
+            # 替換 release_date
+            temp_df['release_date'] = monthly_max_dates
+            # 移除輔助欄位
+            temp_df = temp_df.drop(columns=['month_group'])
+
+            # 合併同一 release_date 的資料，保留最後一筆非 NaN 的值 (達到將資料較少的 row 移動到資料較多的 row 的效果)
+            temp_df = temp_df.groupby('release_date').last()
+
+            # 3. 只將 release_date 設為 index，date 可以捨棄
+            temp_df = temp_df.drop(columns=['date'])
+            temp_df = temp_df.sort_index()
+        
+        adjusted_dict[factor] = CustomDataFrame(temp_df)
+
+    return adjusted_dict
 
 # def adjust_index_of_report(df_dict):
 #     """
