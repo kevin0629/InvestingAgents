@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import plotly.express as px
+from pathlib import Path
 
 class Report():
     def __init__(self, stock_data, position, data) -> None:
@@ -30,7 +31,11 @@ class Report():
         imp_stats = pd.Series({
          'annualized_rate_of_return':str(round(self.calc_cagr()*100, 2))+'%',
          'sharpe': str(self.calc_sharpe(self.stock_data['portfolio_returns'], nperiods=252)),
+         'alpha': str(round(stats['alpha']*100, 2))+'%',
+         'beta': str(round(stats['beta'], 2)),
          'max_drawdown':str(round(self.calc_dd(self.stock_data['portfolio_returns']).min()*100, 2))+'%',
+         'avg_holdings': str(int(round(stats['avg_holdings'], 0))),
+         'max_holdings': str(int(stats['max_holdings'])),
          'win_ratio':str(round(stats['win_ratio']*100, 2))+'%',
         }).to_frame().T
         imp_stats.index = ['']
@@ -308,21 +313,50 @@ class Report():
             arr = np.array(list(self.return_table[idx].values()))
             self.return_table[idx]["YTD"] = np.prod(arr + 1) - 1
 
-    def calc_sharpe(self, returns, rf=0.0, nperiods=None, annualize=True):
+    def calc_sharpe(self, returns, rf=None, nperiods=None, annualize=True):
         """
         Calculates the `Sharpe ratio <https://www.investopedia.com/terms/s/sharperatio.asp>`_
         (see `Sharpe vs. Sortino <https://www.investopedia.com/ask/answers/010815/what-difference-between-sharpe-ratio-and-sortino-ratio.asp>`_).
-        If rf is non-zero and a float, you must specify nperiods. In this case, rf is assumed
-        to be expressed in yearly (annualized) terms.
+        
         Args:
             * returns (Series, DataFrame): Input return series
-            * rf (float, Series): `Risk-free rate <https://www.investopedia.com/terms/r/risk-freerate.asp>`_ expressed as a yearly (annualized) return or return series
-            * nperiods (int): Frequency of returns (252 for daily, 12 for monthly,
-                etc.)
+            * rf (float, Series): `Risk-free rate` expressed as a yearly (annualized) return or return series.
+                                  If None, tries to read from 'backend/src/backtest/risk_free_rate.csv'.
+            * nperiods (int): Frequency of returns (252 for daily, 12 for monthly, etc.)
         """
-        # if type(rf) is float and rf != 0 and nperiods is None:
+        if rf is None:
+            try:
+                current_file = Path(__file__).resolve()
+                # 假設結構是 backend/src/backtest/report.py，我們要去 backend/static/file/risk_free.csv
+                # parents[0] = backtest, parents[1] = src, parents[2] = backend
+                project_root = current_file.parents[2] 
+                csv_path = project_root / 'static' / 'file' / 'risk_free.csv'
+
+                # 預期格式: 證券代碼, 年月, 無風險利率
+                # 嘗試多種編碼讀取 (utf-8, cp950/big5, utf-16)
+                # 假設可能使用 \t 分隔
+                try:
+                    rf_df = pd.read_csv(csv_path, encoding='utf-8', sep=None, engine='python')
+                except UnicodeDecodeError:
+                    try:
+                        rf_df = pd.read_csv(csv_path, encoding='cp950', sep=None, engine='python')
+                    except UnicodeDecodeError:
+                        rf_df = pd.read_csv(csv_path, encoding='utf-16', sep=None, engine='python')
+                
+                if '年月' in rf_df.columns and '無風險利率' in rf_df.columns:
+                     rf_df['date'] = pd.to_datetime(rf_df['年月'].astype(str), format='%Y%m')
+                     rf_df = rf_df.set_index('date').sort_index()
+                     rf = rf_df['無風險利率'] / 100
+                else:
+                    print("risk_free.csv 欄位不符 (需有: 年月, 無風險利率)")
+                    rf = 0.0
+                
+            except Exception as e:
+                print(f"無風險利率讀取失敗: {e}")
+                rf = 0.0
+
         if isinstance(rf, float) and rf != 0 and nperiods is None:
-            raise Exception("Must provide nperiods if rf != 0")
+             raise Exception("Must provide nperiods if rf != 0")
 
         er = to_excess_returns(returns, rf, nperiods=nperiods)
         std = np.std(er, ddof=1)
@@ -367,6 +401,81 @@ class Report():
         stats['avg_drawdown'] = self.calc_dd(self.stock_data['portfolio_returns']).mean()
         stats['win_ratio'] = sum(trades['return'] > 0) / len(trades) if len(trades) != 0 else 0
         stats['ytd'] = self.calc_ytd(dp,yp)
+
+        # 計算 Alpha 與 Beta
+        if hasattr(self, 'daily_benchmark'):
+            try:
+                s_rets = dp.copy().pct_change().dropna()
+                b_rets = self.daily_benchmark.copy().pct_change().dropna()
+                
+                if isinstance(b_rets, pd.DataFrame):
+                    b_rets = b_rets.iloc[:, 0]
+                
+                common_index = s_rets.index.intersection(b_rets.index)
+                if len(common_index) > 1:
+                    s_rets = s_rets.loc[common_index]
+                    b_rets = b_rets.loc[common_index]
+                    
+                    # 載入無風險利率 (比照 calc_sharpe 邏輯)
+                    try:
+                        current_file = Path(__file__).resolve()
+                        project_root = current_file.parents[2] 
+                        csv_path = project_root / 'static' / 'file' / 'risk_free.csv'
+                        try:
+                            rf_df = pd.read_csv(csv_path, encoding='utf-8', sep=None, engine='python')
+                        except UnicodeDecodeError:
+                            try:
+                                rf_df = pd.read_csv(csv_path, encoding='cp950', sep=None, engine='python')
+                            except UnicodeDecodeError:
+                                rf_df = pd.read_csv(csv_path, encoding='utf-16', sep=None, engine='python')
+                        
+                        if '年月' in rf_df.columns and '無風險利率' in rf_df.columns:
+                            rf_df['date'] = pd.to_datetime(rf_df['年月'].astype(str), format='%Y%m')
+                            rf_df = rf_df.set_index('date').sort_index()
+                            rf_annual = rf_df['無風險利率'] / 100
+                            rf_daily = deannualize(rf_annual, 252)
+                            rf_series = rf_daily.reindex(common_index, method='ffill').fillna(0.0)
+                        else:
+                            rf_series = pd.Series(0.0, index=common_index)
+                    except:
+                        rf_series = pd.Series(0.0, index=common_index)
+
+                    # 1. 計算 Beta
+                    # 公式: Correlation(策略, 大盤) * (策略標準差 / 大盤標準差)
+                    corr = s_rets.corr(b_rets)
+                    std_s = s_rets.std()
+                    std_b = b_rets.std()
+                    
+                    if std_b != 0:
+                        beta = corr * (std_s / std_b)
+                    else:
+                        beta = 0.0
+                    
+                    # 2. 計算 Jensen's Alpha
+                    # 公式: Alpha = (Rp - Rf) - Beta * (Rm - Rf)
+                    # 先計算年化平均報酬
+                    avg_excess_s = (s_rets - rf_series).mean() * 252
+                    avg_excess_b = (b_rets - rf_series).mean() * 252
+                    
+                    alpha = avg_excess_s - beta * avg_excess_b
+
+                    stats['alpha'] = alpha
+                    stats['beta'] = beta
+                else:
+                    stats['alpha'] = 0.0
+                    stats['beta'] = 0.0
+            except Exception as e:
+                print(f"Alpha/Beta 計算失敗: {e}")
+        else:
+            print("無法計算 Alpha/Beta，缺少 Benchmark 資料")
+
+        # 計算持股檔數統計
+        if 'company_count' in self.stock_data:
+            stats['avg_holdings'] = self.stock_data['company_count'].mean()
+            stats['max_holdings'] = self.stock_data['company_count'].max()
+        else:
+            stats['avg_holdings'] = 0
+            stats['max_holdings'] = 0
 
         return stats
 
@@ -529,19 +638,31 @@ def to_excess_returns(returns, rf, nperiods=None):
     Given a series of returns, it will return the excess returns over rf.
     Args:
         * returns (Series, DataFrame): Returns
-        * rf (float, Series): `Risk-Free rate(s) <https://www.investopedia.com/terms/r/risk-freerate.asp>`_ expressed in annualized term or return series
+        * rf (float, Series): `Risk-free rate <https://www.investopedia.com/terms/r/risk-freerate.asp>`_ expressed as a yearly (annualized) return or return series
         * nperiods (int): Optional. If provided, will convert rf to different
             frequency using deannualize only if rf is a float
     Returns:
         * excess_returns (Series, DataFrame): Returns - rf
     """
-    # if type(rf) is float and nperiods is not None:
-    if isinstance(rf, float) and nperiods is not None:
 
-        _rf = deannualize(rf, nperiods)
+    returns = returns.copy().pct_change().dropna()
+
+    if isinstance(rf, pd.Series):
+        if nperiods is not None:
+            _rf = deannualize(rf, nperiods)
+            _rf = _rf.reindex(returns.index, method='ffill')
+            _rf = _rf.bfill().fillna(0.0)
+        else:
+            _rf = rf.reindex(returns.index, method='ffill').fillna(0.0)
+            
+    elif isinstance(rf, (float, int)) and rf != 0:
+        if nperiods is not None:
+            _rf = deannualize(rf, nperiods)
+        else:
+             _rf = rf
     else:
-        _rf = rf
-
+        _rf = 0.0
+  
     return returns - _rf
 
 def rebase(prices, value=100):

@@ -145,8 +145,12 @@ class Data:
             # 財報資料調整
             adjusted_report_data = adjust_index_of_report(report_data)
             # 處理財報資料缺漏植問題: ffill
-            for df in adjusted_report_data.values():
-                df.fillna(method="ffill", inplace=True)
+            # for df in adjusted_report_data.values():
+            #     df.fillna(method="ffill", inplace=True)
+            for key in adjusted_report_data:
+                adjusted_report_data[key].fillna(method="ffill", inplace=True)
+                adjusted_report_data[key] = adjusted_report_data[key].resample("D").ffill()
+
             # return report_data
             if len(adjusted_report_data) == 1:
                 return next(iter(adjusted_report_data.values()))
