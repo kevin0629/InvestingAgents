@@ -12,3 +12,5 @@ core/build/
 
 # Outputfiles
 OutputFile/
+
+cache/

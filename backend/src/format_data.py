@@ -167,30 +167,14 @@ def adjust_index_of_report(df_dict):
         elif 'date' in temp_df.index.names and 'release_date' in temp_df.index.names:
              temp_df = temp_df.reset_index()
 
-        # 確保需要的欄位存在才處理
         if 'date' in temp_df.columns and 'release_date' in temp_df.columns:
             temp_df['date'] = pd.to_datetime(temp_df['date'])
             temp_df['release_date'] = pd.to_datetime(temp_df['release_date'])
-
-            # 1. 若 release_date 某日的值不是唯一，僅保留 date 較後面的資料
             temp_df = temp_df.sort_values(by=['release_date', 'date'])
-            temp_df = temp_df.drop_duplicates(subset=['release_date'], keep='last')
-
-            # 2. 針對 release_date 做觀察，每月如果有更早的日期都要被替換為該月日期最大的 release_date
-            # 新增輔助欄位：月份
-            temp_df['month_group'] = temp_df['release_date'].dt.to_period('M')
-            # 找出每個月的最大 release_date
-            monthly_max_dates = temp_df.groupby('month_group')['release_date'].transform('max')
-            # 替換 release_date
-            temp_df['release_date'] = monthly_max_dates
-            # 移除輔助欄位
-            temp_df = temp_df.drop(columns=['month_group'])
-
-            # 合併同一 release_date 的資料，保留最後一筆非 NaN 的值 (達到將資料較少的 row 移動到資料較多的 row 的效果)
-            temp_df = temp_df.groupby('release_date').last()
-
-            # 3. 只將 release_date 設為 index，date 可以捨棄
+            temp_df = temp_df.set_index('release_date')
             temp_df = temp_df.drop(columns=['date'])
+            temp_df = temp_df.groupby(level=0).last()
+            
             temp_df = temp_df.sort_index()
         
         adjusted_dict[factor] = CustomDataFrame(temp_df)

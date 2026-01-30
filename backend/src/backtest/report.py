@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 from pathlib import Path
+import plotly.graph_objs as go
+import matplotlib.pyplot as plt
 
 class Report():
     def __init__(self, stock_data, position, data) -> None:
@@ -130,7 +132,6 @@ class Report():
     def create_performance_figure(self, position):
 
         from plotly.subplots import make_subplots
-        import plotly.graph_objs as go
         # plot performance
 
         def diff(s, period):
@@ -502,14 +503,27 @@ class Report():
         # index 有可能是:
         # position/period/return/mae/gmfe/bmfe/mdd/pdays
         # 假設你的dataframe名稱是trades_history
-        df = self.current_trades
+        
+        df = self.trades.copy()
+        
+        # 檢查欄位是否存在
+        if index not in df.columns:
+            print(f"Column '{index}' not found in trades data.")
+            return
+
         # 將return欄位的數值乘以100
         if(index == "position" or index == "return" or index == "mae" or index == "gmfe" or index == "bmfe" or index == "mdd" ):
             df[index] = df[index] * 100
 
         # 繪製直方圖
         plt.figure(figsize=(10, 6))
-        data = df[index]
+        
+        # 移除 NaN 值以避免 np.histogram 錯誤
+        data = df[index].dropna()
+        
+        if len(data) == 0:
+            print(f"No valid data to plot histogram for {index}")
+            return
 
         # 設置bins的數量
         bins = 30

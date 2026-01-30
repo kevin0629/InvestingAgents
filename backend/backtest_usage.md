@@ -32,6 +32,53 @@ report = sim(position, resample='M', stop_loss=0.1, ...)
 | **`position_limit`** | `float` | 倉位限制 (總資金使用率)。預設為 `1` (不開槓桿，使用 100% 資金)。 | `1.0` |
 | **`live_performance_start`**| `str` | 指定日期後為「樣本外」測試 (Live Performance)，在圖表上會區隔顯示。 | `'2023-01-01'` |
 
+### 深入解析：換股機制與交易時機
+
+很多人關心回測到底是在「哪一天」買賣？若是假日怎麼辦？以下直接引用 `src/backtest/backtest.py` 的程式碼來解釋其運作邏輯。
+
+#### 1. 換股日期的產生 (Resampling)
+當你有設定 `resample` 參數 (例如 `'M'`, `'W'`) 時，系統不會每天檢查訊號，而是只在特定的「換股日」進行部位調整。
+
+程式碼片段 (`backtest.py`):
+```python
+# generate rebalance dates
+alldates = pd.date_range(
+    position.index[0], 
+    position.index[-1] + datetime.timedelta(days=720), 
+    freq=resample, tz=tz)
+
+alldates += DateOffset(days=offset_days)
+```
+- **邏輯**：使用 pandas 的 `date_range` 函式，從策略訊號的第一天開始，依照你設定的頻率 (freq) 產生一系列的日期。
+- **範例**：若 `resample='M'` (月終)，通常會產生每個月的最後一天 (如 1/31, 2/28, 3/31...)。
+
+#### 2. 遇假日順延機制 (Holiday Handling)
+產生的換股日如果是週六、週日或國定假日（沒有股價資料的日子），系統會如何處理？
+
+程式碼片段 (`backtest.py` - `calc_essential_price`):
+```python
+def calc_essential_price(price, dates):
+    # ... 省略部分代碼
+    indexer = price.index.get_indexer(dates + dt)
+
+    # 關鍵：若找不到該日期 (indexer == -1)，則往後找第一個存在的日期 (side='right')
+    valid_idx = np.where(indexer == -1, np.searchsorted(price.index, dates, side='right'), indexer)
+    # ...
+```
+- **邏輯**：系統會去比對股價資料 (`price.index`)。如果換股日當天沒有股價 (假日)，`np.searchsorted(..., side='right')` 會自動抓取**「下一個交易日」**作為實際執行交易的日期。
+- **結論**：你不用擔心假日問題，回測引擎會自動在假日後的**次一個開盤日**以**開盤價** (或其他指定價格) 進行搓合。
+
+#### 3. 訊號的對齊與填補 (Signal Alignment)
+如果在換股日當天，原本的策略沒有產生訊號怎麼辦？
+
+程式碼片段 (`backtest.py`):
+```python
+if dates is not None:
+    position = position.reindex(dates, method='ffill')
+```
+- **邏輯**：系統會將你的訊號表 (`position`) 強制重新對齊 (reindex) 到上述計算出的換股日。
+- **`ffill` (Forward Fill)**：若換股日當天原本沒有訊號，它會沿用**「最近一次」**的舊訊號。這確保了在定期換股時，我們是根據最新的已知狀態來決定持倉。
+
 ### 回傳物件：`Report`
 
 `sim()` 函數執行後會回傳一個 `src.backtest.report.Report` 物件，你可以使用以下方法來分析結果：

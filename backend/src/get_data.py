@@ -4,6 +4,9 @@ from src.format_data import *
 import talib
 import pandas as pd
 import numpy as np
+import pickle
+import os
+from datetime import datetime, timedelta
 
 # Abstract API：
 from talib import abstract
@@ -23,29 +26,82 @@ def get_input_args(attr):
 
 
 class Data:
-    def __init__(self, raw_price=None, raw_report=None, raw_taiex=None):
+    def __init__(self, raw_price=None, raw_report=None, raw_taiex=None, use_cache=False, cache_dir="./cache"):
         """
         初始化物件，連接資料庫並下載相關資料。
 
         Args:
             self: 類的實例（通常是類的物件，不需要額外指定）。
+            raw_price: 預先提供的股價資料
+            raw_report: 預先提供的財報資料
+            raw_taiex: 預先提供的台股指數資料
+            use_cache: 是否使用快取（預設 False）
+            cache_dir: 快取資料夾路徑（預設 ./cache）
         """
         # 連接資料庫
         self.db = Database()
-
+        self.cache_dir = cache_dir
+        
+        # 如果使用快取
+        if use_cache:
+            cache_data = self._load_cache()
+            if cache_data:
+                self.raw_price_data = cache_data['price']
+                self.raw_report_data = cache_data['report']
+                self.raw_taiex_data = cache_data['taiex']
+            else:
+                self._fetch_from_db()
+                self._save_cache()
         # 如果使用者事先提供 raw 資料（例如來自 async 工廠），直接使用
-        if raw_price is not None and raw_report is not None and raw_taiex is not None:
+        elif raw_price is not None and raw_report is not None and raw_taiex is not None:
             self.raw_price_data = raw_price
             self.raw_report_data = raw_report
             self.raw_taiex_data = raw_taiex
         else:
-            # 使用同步 wrapper 取得資料（在 notebook 可能需 nest_asyncio）
-            self.raw_price_data = self.db.get_daily_stock_sync()
-            self.raw_report_data = self.db.get_finance_report_sync()
-            self.raw_taiex_data = self.db.get_taiex_data_sync()
+            self._fetch_from_db()
 
         # 處理價格字典
         self.all_price_dict = self.handle_price_data()
+
+    def _fetch_from_db(self):
+        """從資料庫讀取資料"""
+        self.raw_price_data = self.db.get_daily_stock_sync()
+        self.raw_report_data = self.db.get_finance_report_sync()
+        self.raw_taiex_data = self.db.get_taiex_data_sync()
+
+    def _save_cache(self):
+        """儲存資料到快取"""
+        os.makedirs(self.cache_dir, exist_ok=True)
+        cache_file = os.path.join(self.cache_dir, "data_cache.pkl")
+        cache_data = {
+            'price': self.raw_price_data,
+            'report': self.raw_report_data,
+            'taiex': self.raw_taiex_data,
+            'timestamp': datetime.now()
+        }
+        with open(cache_file, 'wb') as f:
+            pickle.dump(cache_data, f)
+
+    def _load_cache(self, max_age_days=60):
+        """載入快取資料（預設 60 天內有效）"""
+        cache_file = os.path.join(self.cache_dir, "data_cache.pkl")
+        if not os.path.exists(cache_file):
+            return None
+        
+        try:
+            with open(cache_file, 'rb') as f:
+                cache_data = pickle.load(f)
+            
+            # 檢查快取是否過期
+            cache_time = cache_data['timestamp']
+            if datetime.now() - cache_time > timedelta(days=max_age_days):
+                print(f"快取已超過 {max_age_days} 天，將重新讀取")
+                return None
+            
+            return cache_data
+        except Exception as e:
+            print(f"讀取快取失敗: {e}")
+            return None
 
     @classmethod
     async def create(cls):
@@ -144,12 +200,11 @@ class Data:
             report_data = self.format_report_data(item)
             # 財報資料調整
             adjusted_report_data = adjust_index_of_report(report_data)
-            # 處理財報資料缺漏植問題: ffill
-            # for df in adjusted_report_data.values():
-            #     df.fillna(method="ffill", inplace=True)
+            
+            price_index = pd.to_datetime(self.all_price_dict["close"].index)
+
             for key in adjusted_report_data:
-                adjusted_report_data[key].fillna(method="ffill", inplace=True)
-                adjusted_report_data[key] = adjusted_report_data[key].resample("D").ffill()
+                adjusted_report_data[key] = adjusted_report_data[key].reindex(price_index, method="ffill")
 
             # return report_data
             if len(adjusted_report_data) == 1:
