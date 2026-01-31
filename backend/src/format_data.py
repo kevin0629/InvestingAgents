@@ -68,6 +68,9 @@ def handle_price_data(raw_price_data):
     all_close = format_price_data(raw_price_data, "close")
     all_volume = format_price_data(raw_price_data, "volume")
     all_market_capital = format_price_data(raw_price_data, "market_capital")
+    all_pe_ratio = format_price_data(raw_price_data, "pe_ratio")
+    all_beta = format_price_data(raw_price_data, "beta")
+
     all_price_dict = {
         "open": all_open,
         "high": all_high,
@@ -75,6 +78,8 @@ def handle_price_data(raw_price_data):
         "close": all_close,
         "volume": all_volume,
         "market_capital": all_market_capital,
+        "pe_ratio": all_pe_ratio,
+        "beta": all_beta,
     }
     return all_price_dict
 

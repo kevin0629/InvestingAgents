@@ -200,11 +200,10 @@ class Data:
             report_data = self.format_report_data(item)
             # 財報資料調整
             adjusted_report_data = adjust_index_of_report(report_data)
-            
-            price_index = pd.to_datetime(self.all_price_dict["close"].index)
 
             for key in adjusted_report_data:
-                adjusted_report_data[key] = adjusted_report_data[key].reindex(price_index, method="ffill")
+                adjusted_report_data[key].fillna(method="ffill", inplace=True)
+                adjusted_report_data[key] = adjusted_report_data[key].resample("B").ffill()
 
             # return report_data
             if len(adjusted_report_data) == 1:
