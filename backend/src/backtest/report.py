@@ -12,7 +12,7 @@ class Report():
         self.calc_return_table()
 
         try:
-            self.benchmark = data.get('taiex: close')
+            self.benchmark = data.get('adjustedtaiex:close')
             self.benchmark.index = pd.to_datetime(self.benchmark.index)
 
             self.daily_benchmark = rebase(self.benchmark\

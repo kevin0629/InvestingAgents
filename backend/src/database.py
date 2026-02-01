@@ -1,6 +1,6 @@
 from src.config import Config
 from src.dataframe import CustomDataFrame
-from src.models import Taiex, Stock, Company, Factor, FactorValue
+from src.models import AdjustedTaiex, Taiex, Stock, Company, Factor, FactorValue
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy import select
 from datetime import date
@@ -73,6 +73,16 @@ class Database:
             except Exception:
                 raise RuntimeError("Event loop is already running. Use 'await Database().get_taiex_data()' in async context or install 'nest_asyncio'.")
         return asyncio.run(self.get_taiex_data())
+    
+
+    def get_adjusted_taiex_data_sync(self):
+        if asyncio.get_event_loop().is_running():
+            try:
+                import nest_asyncio
+                nest_asyncio.apply()
+            except Exception:
+                raise RuntimeError("Event loop is already running. Use 'await Database().get_adjusted_taiex_data()' in async context or install 'nest_asyncio'.")
+        return asyncio.run(self.get_adjusted_taiex_data())
 
 
     # 取得公司的開高低收、市值、本益比、beta(stock)
@@ -168,6 +178,25 @@ class Database:
                 data = result.all()
 
                 columns = ["date", "open", "high", "low", "close", "volume", "market_capital"]
+                df = CustomDataFrame(data, columns=columns)
+                return df
+
+            except Exception as e:
+                print(f"取得 Taiex 失敗: {e}")
+                return e
+            
+    async def get_adjusted_taiex_data(self):
+        async with self.async_session() as session:
+            try:
+                stmt = select(
+                    AdjustedTaiex.date,
+                    AdjustedTaiex.close,
+                ).order_by(AdjustedTaiex.date)
+
+                result = await session.execute(stmt)
+                data = result.all()
+
+                columns = ["date", "close"]
                 df = CustomDataFrame(data, columns=columns)
                 return df
 

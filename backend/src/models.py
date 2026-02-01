@@ -143,6 +143,17 @@ class Taiex(Base):
     market_cap = Column(Integer)
 
 
+class AdjustedTaiex(Base):
+    """
+    大盤報酬指數：
+    在單一日期的值
+    """
+    __tablename__ = 'adjustedtaiex'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    date = Column(Date, nullable=False)
+    close = Column(Float)
+
+
 # class Chips(Base):
 #     """
 #     籌碼資訊

@@ -26,7 +26,7 @@ def get_input_args(attr):
 
 
 class Data:
-    def __init__(self, raw_price=None, raw_report=None, raw_taiex=None, use_cache=False, cache_dir="./cache"):
+    def __init__(self, raw_price=None, raw_report=None, raw_taiex=None, raw_adjusted_taiex=None, use_cache=False, cache_dir="./cache"):
         """
         初始化物件，連接資料庫並下載相關資料。
 
@@ -35,6 +35,7 @@ class Data:
             raw_price: 預先提供的股價資料
             raw_report: 預先提供的財報資料
             raw_taiex: 預先提供的台股指數資料
+            raw_adjusted_taiex: 預先提供的還原台股指數資料
             use_cache: 是否使用快取（預設 False）
             cache_dir: 快取資料夾路徑（預設 ./cache）
         """
@@ -49,14 +50,16 @@ class Data:
                 self.raw_price_data = cache_data['price']
                 self.raw_report_data = cache_data['report']
                 self.raw_taiex_data = cache_data['taiex']
+                self.raw_adjusted_taiex_data = cache_data['adjusted_taiex']
             else:
                 self._fetch_from_db()
                 self._save_cache()
         # 如果使用者事先提供 raw 資料（例如來自 async 工廠），直接使用
-        elif raw_price is not None and raw_report is not None and raw_taiex is not None:
+        elif raw_price is not None and raw_report is not None and raw_taiex is not None and raw_adjusted_taiex is not None:
             self.raw_price_data = raw_price
             self.raw_report_data = raw_report
             self.raw_taiex_data = raw_taiex
+            self.raw_adjusted_taiex_data = raw_adjusted_taiex
         else:
             self._fetch_from_db()
 
@@ -68,7 +71,8 @@ class Data:
         self.raw_price_data = self.db.get_daily_stock_sync()
         self.raw_report_data = self.db.get_finance_report_sync()
         self.raw_taiex_data = self.db.get_taiex_data_sync()
-
+        self.raw_adjusted_taiex_data = self.db.get_adjusted_taiex_data_sync()
+        
     def _save_cache(self):
         """儲存資料到快取"""
         os.makedirs(self.cache_dir, exist_ok=True)
@@ -77,6 +81,7 @@ class Data:
             'price': self.raw_price_data,
             'report': self.raw_report_data,
             'taiex': self.raw_taiex_data,
+            'adjusted_taiex': self.raw_adjusted_taiex_data,
             'timestamp': datetime.now()
         }
         with open(cache_file, 'wb') as f:
@@ -109,7 +114,8 @@ class Data:
         raw_price = await db.get_daily_stock()
         raw_report = await db.get_finance_report()
         raw_taiex = await db.get_taiex_data()
-        return cls(raw_price, raw_report, raw_taiex)
+        raw_adjusted_taiex = await db.get_adjusted_taiex_data()
+        return cls(raw_price, raw_report, raw_taiex, raw_adjusted_taiex)
 
     def format_price_data(self, item):
         """
@@ -192,7 +198,7 @@ class Data:
             # 呼叫處理開高低收的FUNCT
             price_data = self.all_price_dict[item]
             # 處理價量資料缺漏植問題: ffill
-            price_data.fillna(method="ffill", inplace=True)
+            # price_data.fillna(method="ffill", inplace=True)
             return price_data
         elif subject == "report":
             # 財報資料的Header為大寫
@@ -217,6 +223,13 @@ class Data:
             if "date" in self.raw_taiex_data.columns:
                 self.raw_taiex_data.set_index("date", inplace=True)
             return self.raw_taiex_data[[item]]
+        
+        # EX. 想要取得台股加權報酬指數(收盤價):
+        # taiex_close = data.get("adjustedtaiex: close")
+        elif subject == "adjustedtaiex":
+            if "date" in self.raw_adjusted_taiex_data.columns:
+                self.raw_adjusted_taiex_data.set_index("date", inplace=True)
+            return self.raw_adjusted_taiex_data[[item]]
 
         else:
             print("目前資料來源有price、report、taiex")
