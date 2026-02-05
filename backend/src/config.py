@@ -7,7 +7,7 @@ class Config(BaseSettings):
                         password = "113423027",
                         host = "127.0.0.1",
                         port = "5432",
-                        database = "temp1"
+                        database = "stock"
                     )
     
     CORS_ORIGINS: list[str] = ["http://localhost", "http://127.0.0.1"]
