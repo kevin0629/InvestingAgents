@@ -20,6 +20,7 @@ dependencies = [
     "debugpy==1.8.0",
     "decorator==5.1.1",
     "executing==1.2.0",
+    "fastapi[uvicorn]>=0.128.1",
     "fastjsonschema==2.18.1",
     "finlab==0.5.7",
     "fonttools==4.42.1",
@@ -41,6 +42,7 @@ dependencies = [
     "matplotlib==3.7.4",
     "matplotlib-inline==0.1.6",
     "more-itertools==10.1.0",
+    "mplfinance>=0.12.10b0",
     "nbformat==5.9.2",
     "nest-asyncio==1.5.8",
     "numpy==1.24.4",
@@ -88,6 +90,7 @@ dependencies = [
     "typing-extensions==4.8.0",
     "tzdata==2023.3",
     "urllib3==2.0.7",
+    "uvicorn>=0.40.0",
     "wcwidth==0.2.6",
     "zipp==3.17.0",
 ]

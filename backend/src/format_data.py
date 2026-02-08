@@ -101,6 +101,36 @@ def get_each_company_daily_price(raw_price_data, company_symbol):
     return filtered_df
 
 
+def get_taiex_daily(raw_taiex_data):
+    """
+    獲取 taiex 的每日價格資料。
+
+    參數：
+    raw_taiex_data (DataFrame)：來自DB表格的原始台灣加權指數資料。
+
+    返回：
+    DataFrame：台灣加權指數的每日價格資料。
+    """
+    filtered_df = raw_taiex_data.copy()
+    filtered_df.set_index("date", inplace=True)
+    filtered_df = filtered_df.sort_index(ascending=True)
+    return filtered_df
+
+def get_adjusted_taiex_daily(raw_adjusted_taiex_data):
+    """獲取調整後的台灣加權指數每日價格資料。
+
+    參數：
+    raw_adjusted_taiex_data (DataFrame)：來自DB表格的原始調整後台灣加權指數資料。
+
+    返回：
+    DataFrame：調整後的台灣加權指數每日價格資料。
+    """
+    filtered_df = raw_adjusted_taiex_data.copy()
+    filtered_df.set_index("date", inplace=True)
+    filtered_df = filtered_df.sort_index(ascending=True)
+    return filtered_df
+
+
 def get_all_company_symbol(raw_price_data):
     """
     獲取原始價格資料中所有獨特的公司代號清單。

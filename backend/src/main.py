@@ -4,8 +4,14 @@ from src.config import Config
 from src.company.router import router as company_router
 from src.factor.router import router as factor_router
 from src.indicator.router import router as indicator_router
+from src.stock.router import router as stock_router
+from src.utils import get_data_instance
+
+
 
 config = Config()
+data = get_data_instance()  # 預先載入 Data 實例，確保在啟動時就有資料可用
+
 
 app = FastAPI(title="BacktestSystem API", version=config.APP_VERSION, description="回測系統 API")
 
@@ -20,7 +26,10 @@ app.add_middleware(
 app.include_router(company_router)
 app.include_router(factor_router)
 app.include_router(indicator_router)
+app.include_router(stock_router)
 
+
+# 啟動 Web: uvicorn src.main:app --reload
 @app.get("/")
 async def root():
     """根路徑，返回 API 基本資訊"""
