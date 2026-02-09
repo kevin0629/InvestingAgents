@@ -49,6 +49,26 @@ async def get_stock_chart(
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail="Internal Server Error")
-    return {"message": "Stock data retrieved", "symbol": company_symbol} 
+    
+@router.get("/{company_symbol}/river", responses={200: {"content": {"image/png": {}}}})
+async def get_stock_chart(
+    company_symbol: str,
+    end_date: Optional[str] = None,
+):
+    """
+    獲取股票本益比河流圖
+    """
+    try:
+        data = get_data_instance()
+        service = StockService(data, company_symbol, end_date)
+        image_buf = service.get_stock_river_chart()
+        return StreamingResponse(image_buf, media_type="image/png")
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
 

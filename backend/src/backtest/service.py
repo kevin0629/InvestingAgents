@@ -278,7 +278,7 @@ class BacktestService:
             holdings.append(HoldingInfo(
                 stock_id=str(idx) if isinstance(idx, (str, int)) else None,
                 position=float(row.get('position')) if pd.notna(row.get('position')) else None,
-                entry_date=str(row.get('entry_date')) if pd.notna(row.get('entry_date')) else None,
+                entry_date=str(row.get('entry_date'))[:10] if pd.notna(row.get('entry_date')) else None,
                 entry_price=float(entry_price) if entry_price is not None else None,
             ))
         

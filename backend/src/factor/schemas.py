@@ -23,3 +23,14 @@ class FactorResponse(BaseModel):
             }
         }
     )
+
+
+class DuPontPeriodData(BaseModel):
+    """單一期間的杜邦分析數據"""
+    period: str = Field(..., description="期間 (例: 2025Q4)")
+    formula: str = Field(..., description="杜邦公式字串")
+
+
+class DuPontAnalysisResponse(BaseModel):
+    """杜邦分析回應"""
+    dupont_analysis: List[DuPontPeriodData] = Field(..., description="各期間的杜邦分析數據列表")

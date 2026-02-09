@@ -119,3 +119,86 @@ class FactorService:
         data = await self.aggregated(rows, groups=groups)
 
         return data
+    
+
+
+    async def dupont_analysis(self, company_symbol: str, end_date: str = None, num: int = 4):
+        if end_date is None:
+            end_date = datetime.now(tz=ZoneInfo("Asia/Taipei")).date().isoformat()
+        
+        end_date = datetime.fromisoformat(end_date)
+        stmt = select(Company).where(Company.symbol == company_symbol)
+        result = await self.session.execute(stmt)
+        company = result.scalars().first()
+
+        if not company:
+            return {}
+        
+        FactorList = ["ROE", "PM", "ATR", "ER"]
+        stmt = (
+            select(
+                FactorValue.date,
+                FactorValue.release_date,
+                Factor.factor_name,
+                FactorValue.factor_value,
+            )
+            .join(Factor, FactorValue.factor_id == Factor.id)
+            .where(FactorValue.company_id == company.id)
+            .where(Factor.factor_name.in_(FactorList))
+            .where(FactorValue.release_date > end_date - relativedelta(months=num*3))
+            .where(FactorValue.release_date <= end_date)
+            .order_by(FactorValue.date.desc())
+        )
+
+        result = await self.session.execute(stmt)
+        rows = result.all()
+
+        if not rows:
+            return {}
+        
+        # 按日期和發布日期分組數據
+        date_groups = defaultdict(lambda: {"date": None, "release_date": None, "factors": {}})
+        
+        for row in rows:
+            date = row[0]
+            release_date = row[1]
+            factor_name = row[2]
+            factor_value = row[3]
+            
+            # 使用季度鍵作為分組依據
+            quarter_key = f"{date.year}Q{((date.month - 1) // 3 + 1)}"
+            
+            if date_groups[quarter_key]["date"] is None:
+                date_groups[quarter_key]["date"] = date.isoformat()
+                date_groups[quarter_key]["release_date"] = release_date.isoformat()
+            
+            # 儲存因子值
+            if factor_name == "ROE":
+                date_groups[quarter_key]["factors"]["ROE"] = factor_value
+            elif factor_name == "PM":
+                date_groups[quarter_key]["factors"]["PM"] = factor_value
+            elif factor_name == "ATR":
+                date_groups[quarter_key]["factors"]["ATR"] = factor_value / 100
+            elif factor_name == "ER":
+                date_groups[quarter_key]["factors"]["ER"] = factor_value / 100
+        
+        # 計算杜邦分析並格式化結果
+        result_data = []
+        for quarter_key in sorted(date_groups.keys(), reverse=True):
+            group = date_groups[quarter_key]
+            factors = group["factors"]
+            
+            # 確保所有所需因子都存在
+            if all(k in factors for k in ["ROE", "PM", "ATR", "ER"]):
+                roe_actual = factors["ROE"]
+                pm = factors["PM"]
+                atr = factors["ATR"]
+                er = factors["ER"]
+                
+                
+                result_data.append({
+                    "period": quarter_key,
+                    "formula": f"{roe_actual}% = {pm}% × {round(atr, 4)} × {round(er, 4)}",
+                })
+        
+        return {"dupont_analysis": result_data}

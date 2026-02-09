@@ -1,6 +1,8 @@
 import io
 import matplotlib
 matplotlib.use('Agg') # Set non-interactive backend
+import matplotlib.pyplot as plt
+import numpy as np
 import mplfinance as mpf
 import pandas as pd
 import talib
@@ -466,6 +468,131 @@ class StockService:
             
         except Exception as e:
             raise RuntimeError(f"Failed to generate chart: {str(e)}")
+
+        buf.seek(0)
+        return buf
+    
+    def get_stock_river_chart(self) -> io.BytesIO:
+        """
+        Generate stock river chart using PE ratio bands and close price
+        """
+        
+        buf = io.BytesIO()
+        
+        # Get data
+        close = self.data.get("price:close")[self.company_symbol]
+        pe = self.data.get("price:pe_ratio")[self.company_symbol]
+        
+        # Ensure datetime index
+        close.index = pd.to_datetime(close.index)
+        pe.index = pd.to_datetime(pe.index)
+        
+        # Filter date range
+        end_date_dt = pd.to_datetime(self.end_date) if self.end_date else pd.Timestamp(datetime.now())
+        start_date_dt = end_date_dt - pd.DateOffset(years=10) # Show last 10 years
+        close = close[(close.index <= end_date_dt) & (close.index >= start_date_dt)]
+        pe = pe[(pe.index <= end_date_dt) & (pe.index >= start_date_dt)]
+
+        # Resample to monthly frequency
+        close = close.resample('M').last() # Monthly frequency, take last value of the month
+        pe = pe.resample('M').last() # Monthly frequency, take last value of the month
+        
+        # Combine and clean data
+        data = pd.DataFrame({'close': close, 'pe': pe})
+        data = data.dropna()
+        
+        if len(data) < 10:
+            raise ValueError("Insufficient data for PE river chart (need at least 10 months)")
+        
+        # Calculate EPS from close price and PE ratio (EPS = Price / PE)
+        data['eps'] = data['close'] / data['pe']
+        
+        # Get historical PE min and max (extreme values)
+        pe_min = data['pe'].min()
+        pe_max = data['pe'].max()
+        
+        # Divide into 6 bands (5 equal divisions between min and max)
+        # This creates 6 PE threshold lines
+        pe_lines = np.linspace(pe_min, pe_max, 6)
+        
+        # Create figure
+        fig, ax = plt.subplots(figsize=(19.2, 10.8))
+        
+        # Define colors for PE bands (gradient from cool to warm, 5 colors for 5 bands)
+        band_colors = [
+            '#8FD4B8',  # 青綠 (低PE)
+            '#B8E6A0',  # 淺綠
+            '#F5C77E',  # 橙黃
+            '#F59E6C',  # 橙
+            '#E8746A'   # 紅橙 (高PE)
+        ]
+        
+        # Define colors for 6 PE boundary lines (related to adjacent bands)
+        line_colors = [
+            '#6CBAA0',  # Darker cyan (below band 0)
+            '#9FDD94',  # Between band 0 and 1
+            '#D9B65E',  # Between band 1 and 2
+            '#F28850',  # Between band 2 and 3
+            '#E06558',  # Between band 3 and 4
+            '#C84848'   # Darker red (above band 4)
+        ]
+        
+        # Plot PE bands (fill between) - using price = EPS × PE
+        x = data.index
+        
+        # Draw 5 bands between 6 PE lines
+        for i in range(5):
+            pe_lower = pe_lines[i]
+            pe_upper = pe_lines[i + 1]
+            
+            # Calculate price bands: Price = EPS × PE
+            price_lower = data['eps'] * pe_lower
+            price_upper = data['eps'] * pe_upper
+            
+            ax.fill_between(
+                x, 
+                price_lower, 
+                price_upper,
+                color=band_colors[i],
+                alpha=0.7
+            )
+        
+        # Draw 6 PE boundary lines with labels (solid lines with colors related to adjacent bands)
+        for i, pe_val in enumerate(pe_lines):
+            price_line = data['eps'] * pe_val
+            ax.plot(x, price_line, color=line_colors[i], linewidth=1.5, alpha=0.9, linestyle='-', label=f'PE {pe_val:.1f}')
+        
+        # Plot actual close price (bold line on top)
+        ax.plot(x, data['close'], color='#1f4788', linewidth=2.5, label='Close Price', zorder=10)
+        
+        # Formatting
+        ax.set_title(f'{self.company_symbol} PE River Chart', fontsize=20, fontweight='bold', pad=20)
+        ax.set_xlabel('Date', fontsize=12)
+        ax.set_ylabel('Price', fontsize=12)
+        ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.5)
+        
+        # Legend on the right side
+        ax.legend(
+            loc='center left',
+            bbox_to_anchor=(1.01, 0.5),
+            frameon=True,
+            fancybox=True,
+            shadow=True,
+            fontsize=10
+        )
+        
+        # Format y-axis
+        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{int(y)}'))
+        
+        # Adjust layout to prevent legend cutoff
+        plt.tight_layout()
+        
+        try:
+            fig.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+            plt.close(fig)
+        except Exception as e:
+            plt.close(fig)
+            raise RuntimeError(f"Failed to generate stock river chart: {str(e)}")
 
         buf.seek(0)
         return buf

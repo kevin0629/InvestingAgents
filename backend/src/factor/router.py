@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database import get_db
-from src.factor.schemas import FactorResponse
+from src.factor.schemas import FactorResponse, DuPontAnalysisResponse
 from src.factor.service import FactorService
 from typing import Optional
 
@@ -21,6 +21,26 @@ async def get_company_factors(
         raise HTTPException(status_code=404, detail="Can not find the company data")
     
     return FactorResponse(data=data)
+
+@router.get("/{company_symbol}/dupont", response_model=DuPontAnalysisResponse)
+async def dupont_analysis(
+    company_symbol: str,  
+    end_date: Optional[str] = None, 
+    num: int = 4, 
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    獲取公司的杜邦分析數據
+    
+    杜邦公式：ROE = 淨利率(PM) × 總資產周轉率(ATR) × 權益乘數(ER)
+    """
+    service = FactorService(db)
+    data = await service.dupont_analysis(company_symbol, end_date, num)
+
+    if not data:
+        raise HTTPException(status_code=404, detail="Can not find the company data")
+   
+    return data
 
 @router.get("/{company_symbol}/{factor_name}", response_model=FactorResponse)
 async def get_factor_by_name(
