@@ -20,7 +20,7 @@ class BacktestService:
     AVAILABLE_STRATEGIES = {
         "revenue_growth_roe": {
             "name": "revenue_growth_roe",
-            "description": "穩健營收動能策略：篩選營收成長>24%、負債比<70%、自由現金流>0、流動比率>100%的股票，並選取ROE最高的30檔",
+            "description": "穩健營收動能策略：篩選營收成長>24%、負債比<70%、自由現金流>0、流動比率>100%、EPS>0、ROE>0%的股票，並選取ROE最高的30檔",
             "parameters": {
                 "mryoy_threshold": 24,
                 "dbr_threshold": 70,
@@ -263,7 +263,7 @@ class BacktestService:
     def _extract_current_holdings(self, report) -> List[HoldingInfo]:
         """從報告中提取當前持股"""
         holdings = []
-        open = self.data.get("price:open")
+        close = self.data.get("price:close")
 
         # 嘗試從報告中獲取最新持股資訊
         for idx, row in report.iterrows():
@@ -271,9 +271,9 @@ class BacktestService:
             if pd.notna(exit_date):
                 continue
 
-            stock_open = open[str(idx)]
+            stock_close = close[str(idx)]
             entry_index = row.get('entry_index')
-            entry_price = stock_open.iloc[entry_index] if entry_index is not None else None
+            entry_price = stock_close.iloc[entry_index] if entry_index is not None else None
 
             holdings.append(HoldingInfo(
                 stock_id=str(idx) if isinstance(idx, (str, int)) else None,
