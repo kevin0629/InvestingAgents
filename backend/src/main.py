@@ -5,6 +5,7 @@ from src.company.router import router as company_router
 from src.factor.router import router as factor_router
 from src.indicator.router import router as indicator_router
 from src.stock.router import router as stock_router
+from src.backtest.router import router as backtest_router
 from src.utils import get_data_instance
 
 
@@ -27,7 +28,7 @@ app.include_router(company_router)
 app.include_router(factor_router)
 app.include_router(indicator_router)
 app.include_router(stock_router)
-
+app.include_router(backtest_router)
 
 # 啟動 Web: uvicorn src.main:app --reload
 @app.get("/")

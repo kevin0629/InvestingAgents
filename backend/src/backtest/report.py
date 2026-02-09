@@ -22,7 +22,7 @@ class Report():
             print(f"無法建立 Benchmark: {e}")
             pass
 
-    def display(self):
+    def display(self, jupyter=False):
         from IPython.display import display
         
         # 計算
@@ -46,12 +46,19 @@ class Report():
         monthly_return_fig = self.create_monthly_return_figure()
 
         # show出來
-        display(imp_stats)
-        display(fig)
-        display(yearly_return_fig)
-        display(monthly_return_fig)
-        if hasattr(self, 'current_trades'):
-            display(self.current_trades)
+        if jupyter:
+            display(imp_stats)
+            display(fig)
+            display(yearly_return_fig)
+            display(monthly_return_fig)
+            if hasattr(self, 'current_trades'):
+                display(self.current_trades)
+
+        else:
+            if hasattr(self, 'current_trades'):
+                return imp_stats, self.current_trades
+            
+            return imp_stats
     
     def create_monthly_return_figure(self):
         import plotly.express as px
