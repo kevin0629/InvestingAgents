@@ -1,19 +1,18 @@
 from typing import List, Optional
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from src.models import Company
 
 
 class CompanyService:
-    def __init__(self, session: AsyncSession):
-        self.session = session
+    def __init__(self, data_instance):
+        self.data = data_instance
 
-    async def get_all_companies(self) -> List[Company]:
-        stmt = select(Company)
-        result = await self.session.execute(stmt)
-        return list(result.scalars().all())
+    def get_all_companies(self):
+        data = self.data.get("company_info")
+        return list(data.to_dict(orient="records"))
 
-    async def get_company_by_symbol(self, company_symbol: str) -> Optional[Company]:
-        stmt = select(Company).where(Company.symbol == company_symbol)
-        result = await self.session.execute(stmt)
-        return result.scalars().first()
+
+    def get_company_by_symbol(self, company_symbol: str):
+        data = self.data.get("company_info")
+        company_data = data[data["company_symbol"] == company_symbol]
+        if company_data.empty:
+            return None
+        return company_data.iloc[0].to_dict()

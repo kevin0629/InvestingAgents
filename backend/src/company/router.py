@@ -1,24 +1,24 @@
-from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, HTTPException
 from src.company.schemas import CompanyResponse, CompanyListResponse
 from src.company.service import CompanyService
-from src.database import get_db
+from src.utils import get_data_instance
 
 router = APIRouter(prefix="/company", tags=["company"])
 
 @router.get("/", response_model=CompanyListResponse)
-async def get_companys(db: AsyncSession = Depends(get_db)):
-    service = CompanyService(db)
-    data = await service.get_all_companies()
+async def get_companys():
+    service = CompanyService(get_data_instance())
+    data = service.get_all_companies()
     
     return CompanyListResponse(companies_data=data)
+    
 
 
 @router.get("/{company_symbol}", response_model=CompanyResponse)
-async def get_company(company_symbol: str, db: AsyncSession = Depends(get_db)):
-    service = CompanyService(db)
-    data = await service.get_company_by_symbol(company_symbol)
+async def get_company(company_symbol: str):
+    service = CompanyService(get_data_instance())
+    data = service.get_company_by_symbol(company_symbol)
     if not data:
         raise HTTPException(status_code=404, detail="Company not found")
     
-    return data
+    return CompanyResponse(**data)

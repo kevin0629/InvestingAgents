@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 class CompanyResponse(BaseModel):
     """公司資訊回應"""
     model_config = {"from_attributes": True}
-    symbol: str = Field(..., description="股票代號")
+    company_symbol: str = Field(..., description="股票代號")
     name: str = Field(..., description="公司名稱")
     industry: str = Field(..., description="產業")
     subindustry: str = Field(..., description="子產業")

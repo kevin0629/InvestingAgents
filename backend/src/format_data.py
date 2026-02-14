@@ -122,6 +122,42 @@ def get_each_company_daily_price(raw_price_data, company_symbol):
     filtered_df = filtered_df.sort_index(ascending=True)
     return filtered_df
 
+def get_each_company_fundamental(raw_fundamental_data, company_symbol):
+    """
+    獲取特定公司的財務報表資料。
+
+    參數：
+    raw_fundamental_data (DataFrame)：來自DB表格的原始財務報表資料。
+    company_symbol (str)：要檢索資料的公司代號。
+
+    返回：
+    DataFrame：指定公司的財務報表資料。
+    """
+    filtered_df = raw_fundamental_data[raw_fundamental_data["company_symbol"] == company_symbol]
+    filtered_df.set_index("date", inplace=True)
+    filtered_df = filtered_df.sort_index(ascending=True)
+    filtered_df = filtered_df.drop(columns=["company_symbol"])
+    return filtered_df
+
+
+def get_each_company_report(raw_report_data, company_symbol):
+    """
+    獲取特定公司的報告資料。
+
+    參數：
+    raw_report_data (DataFrame)：來自DB表格的原始報告資料。
+    company_symbol (str)：要檢索資料的公司代號。
+
+    返回：
+    DataFrame：指定公司的報告資料。
+    """
+    filtered_df = raw_report_data[raw_report_data["company_symbol"] == company_symbol]
+    filtered_df.set_index("date", inplace=True)
+    filtered_df = filtered_df.sort_index(ascending=True)
+    filtered_df = filtered_df.drop(columns=["company_symbol"])
+    return filtered_df
+
+
 
 def get_taiex_daily(raw_taiex_data):
     """
