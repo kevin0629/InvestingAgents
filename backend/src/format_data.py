@@ -24,8 +24,30 @@ def format_price_data(raw_price_data, item):
     pivot_data = selected_data.pivot_table(
         index="date", columns="company_symbol", values=item
     )
+    pivot_data.index = pd.to_datetime(pivot_data.index).date
     return CustomDataFrame(pivot_data)
 
+def format_fundamental_data(raw_fundamental_data, indicator):
+    """
+    格式化原始財務報表資料成樞紐表格式。
+
+    參數：
+    raw_fundamental_data (DataFrame)：來自DB表格的原始財務報表資料。
+    item (str)：要提取的項目（例如："現金及約當現金"、"短期投資"）。
+
+    返回：
+    dict：包含每家公司和日期的財報值的DataFrame字典。
+    """
+    indicator_list = indicator.split(",")
+    dfs_by_id = {}
+    for f in indicator_list:
+        temp_df = raw_fundamental_data[raw_fundamental_data["indicator_name"] == f].copy()
+        temp_df = temp_df.pivot_table(
+            index=["date", "release_date"], columns="company_symbol", values="indicator_value"
+        )
+        dfs_by_id[f] = CustomDataFrame(temp_df)
+
+    return dfs_by_id
 
 def format_report_data(raw_report_data, factor):
     """

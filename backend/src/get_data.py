@@ -26,13 +26,15 @@ def get_input_args(attr):
 
 
 class Data:
-    def __init__(self, raw_price=None, raw_report=None, raw_taiex=None, raw_adjusted_taiex=None, use_cache=False, cache_dir="./cache"):
+    def __init__(self, raw_company_info=None, raw_price=None, raw_fundamental=None, raw_report=None, raw_taiex=None, raw_adjusted_taiex=None, use_cache=False, cache_dir="./cache"):
         """
         初始化物件，連接資料庫並下載相關資料。
 
         Args:
             self: 類的實例（通常是類的物件，不需要額外指定）。
+            raw_company_info: 預先提供的公司資訊資料
             raw_price: 預先提供的股價資料
+            raw_fundamental: 預先提供的基本面資料
             raw_report: 預先提供的財報資料
             raw_taiex: 預先提供的台股指數資料
             raw_adjusted_taiex: 預先提供的還原台股指數資料
@@ -47,7 +49,9 @@ class Data:
         if use_cache:
             cache_data = self._load_cache()
             if cache_data:
+                self.raw_company_info = cache_data['company_info']
                 self.raw_price_data = cache_data['price']
+                self.raw_fundamental = cache_data['fundamental']
                 self.raw_report_data = cache_data['report']
                 self.raw_taiex_data = cache_data['taiex']
                 self.raw_adjusted_taiex_data = cache_data['adjusted_taiex']
@@ -55,8 +59,10 @@ class Data:
                 self._fetch_from_db()
                 self._save_cache()
         # 如果使用者事先提供 raw 資料（例如來自 async 工廠），直接使用
-        elif raw_price is not None and raw_report is not None and raw_taiex is not None and raw_adjusted_taiex is not None:
+        elif raw_company_info is not None and raw_price is not None and raw_fundamental is not None and raw_report is not None and raw_taiex is not None and raw_adjusted_taiex is not None:
+            self.raw_company_info = raw_company_info
             self.raw_price_data = raw_price
+            self.raw_fundamental = raw_fundamental
             self.raw_report_data = raw_report
             self.raw_taiex_data = raw_taiex
             self.raw_adjusted_taiex_data = raw_adjusted_taiex
@@ -68,7 +74,9 @@ class Data:
 
     def _fetch_from_db(self):
         """從資料庫讀取資料"""
+        self.raw_company_info = self.db.get_company_info_sync()
         self.raw_price_data = self.db.get_daily_stock_sync()
+        self.raw_fundamental = self.db.get_fundamental_sync()
         self.raw_report_data = self.db.get_finance_report_sync()
         self.raw_taiex_data = self.db.get_taiex_data_sync()
         self.raw_adjusted_taiex_data = self.db.get_adjusted_taiex_data_sync()
@@ -78,7 +86,9 @@ class Data:
         os.makedirs(self.cache_dir, exist_ok=True)
         cache_file = os.path.join(self.cache_dir, "data_cache.pkl")
         cache_data = {
+            'company_info': self.raw_company_info,
             'price': self.raw_price_data,
+            'fundamental': self.raw_fundamental,
             'report': self.raw_report_data,
             'taiex': self.raw_taiex_data,
             'adjusted_taiex': self.raw_adjusted_taiex_data,
@@ -87,8 +97,8 @@ class Data:
         with open(cache_file, 'wb') as f:
             pickle.dump(cache_data, f)
 
-    def _load_cache(self, max_age_days=60):
-        """載入快取資料（預設 60 天內有效）"""
+    def _load_cache(self, max_age_days=100):
+        """載入快取資料（預設 100 天內有效）"""
         cache_file = os.path.join(self.cache_dir, "data_cache.pkl")
         if not os.path.exists(cache_file):
             return None
@@ -111,11 +121,13 @@ class Data:
     @classmethod
     async def create(cls):
         db = Database()
+        raw_company_info = await db.get_company_info()
         raw_price = await db.get_daily_stock()
+        raw_fundamental = await db.get_fundamental()
         raw_report = await db.get_finance_report()
         raw_taiex = await db.get_taiex_data()
         raw_adjusted_taiex = await db.get_adjusted_taiex_data()
-        return cls(raw_price, raw_report, raw_taiex, raw_adjusted_taiex)
+        return cls(raw_company_info, raw_price, raw_fundamental, raw_report, raw_taiex, raw_adjusted_taiex)
 
     def format_price_data(self, item):
         """
@@ -128,6 +140,18 @@ class Data:
             pandas.DataFrame: 處理後的股價資料的DataFrame。
         """
         return format_price_data(self.raw_price_data, item)
+    
+    def format_fundamental_data(self, item):
+        """
+        從原始基本面資料中處理特定項目的資料。
+
+        Args:
+            item (str): 要處理的項目名稱。
+
+        Returns:
+            pandas.DataFrame: 處理後的基本面資料的DataFrame。
+        """
+        return format_fundamental_data(self.raw_fundamental, item)
 
     def format_report_data(self, factor):
         """
@@ -191,15 +215,33 @@ class Data:
         if len(parts) == 2:
             subject = parts[0]
             item = parts[1]
+        elif len(parts) == 1 and parts[0] == "company_info":
+            subject = parts[0]
         else:
             print("輸入格式錯誤(Ex. price:close)")
 
-        if subject == "price":
+        if subject == "company_info":
+            return self.raw_company_info
+        elif subject == "price":
             # 呼叫處理開高低收的FUNCT
             price_data = self.all_price_dict[item]
             # 處理價量資料缺漏植問題: ffill
             # price_data.fillna(method="ffill", inplace=True)
             return price_data
+        
+        elif subject == "fundamental":
+            fundamental_data = self.format_fundamental_data(item)
+            adjusted_fundamental_data = adjust_index_of_report(fundamental_data)
+
+            for key in adjusted_fundamental_data:
+                adjusted_fundamental_data[key].fillna(method="ffill", inplace=True)
+                adjusted_fundamental_data[key] = adjusted_fundamental_data[key].resample("B").ffill()
+            
+            if len(adjusted_fundamental_data) == 1:
+                return next(iter(adjusted_fundamental_data.values()))
+            
+            return adjusted_fundamental_data.values()
+        
         elif subject == "report":
             # 財報資料的Header為大寫
             item = item.upper().replace(" ", "")

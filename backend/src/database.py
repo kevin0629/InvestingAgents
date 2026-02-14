@@ -1,6 +1,6 @@
 from src.config import Config
 from src.dataframe import CustomDataFrame
-from src.models import AdjustedTaiex, Taiex, Stock, Company, Factor, FactorValue
+from src.models import AdjustedTaiex, Taiex, Stock, Company, Factor, FactorValue, SingleIndicator, FinancialReportIndicatorValue
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy import select
 from datetime import date
@@ -44,8 +44,15 @@ class Database:
 
         return self._session_maker()
 
-
-    # --- 同步 wrapper（方便同步呼叫）
+    def get_company_info_sync(self):
+        if asyncio.get_event_loop().is_running():
+            try:
+                import nest_asyncio
+                nest_asyncio.apply()
+            except Exception:
+                raise RuntimeError("Event loop is already running. Use 'await Database().get_daily_stock()' in async context or install 'nest_asyncio' to allow synchronous wrappers in notebooks.")
+        return asyncio.run(self.get_company_info())
+    
     def get_daily_stock_sync(self):
         # If an event loop is already running (e.g. in Jupyter), try to patch with nest_asyncio
         if asyncio.get_event_loop().is_running():
@@ -55,6 +62,15 @@ class Database:
             except Exception:
                 raise RuntimeError("Event loop is already running. Use 'await Database().get_daily_stock()' in async context or install 'nest_asyncio' to allow synchronous wrappers in notebooks.")
         return asyncio.run(self.get_daily_stock())
+    
+    def get_fundamental_sync(self):
+        if asyncio.get_event_loop().is_running():
+            try:
+                import nest_asyncio
+                nest_asyncio.apply()
+            except Exception:
+                raise RuntimeError("Event loop is already running. Use 'await Database().get_fundamental()' in async context or install 'nest_asyncio' to allow synchronous wrappers in notebooks.")
+        return asyncio.run(self.get_fundamental())
 
     def get_finance_report_sync(self):
         if asyncio.get_event_loop().is_running():
@@ -83,6 +99,40 @@ class Database:
             except Exception:
                 raise RuntimeError("Event loop is already running. Use 'await Database().get_adjusted_taiex_data()' in async context or install 'nest_asyncio'.")
         return asyncio.run(self.get_adjusted_taiex_data())
+
+    # 取的公司的基本資訊(company)
+    async def get_company_info(self):
+        async with self.async_session() as session:
+            try:
+                stmt = select(
+                    Company.symbol.label("company_symbol"),
+                    Company.name,
+                    Company.industry,
+                    Company.subindustry,
+                    Company.business1,
+                    Company.business2,
+                    Company.business3,
+                ).where(Company.exchange_name == 'TWSE')
+
+                result = await session.execute(stmt)
+                data = result.all()
+
+                columns = [
+                    "company_symbol", 
+                    "name", 
+                    "industry", 
+                    "subindustry", 
+                    "business1", 
+                    "business2", 
+                    "business3"
+                ]
+
+                df = CustomDataFrame(data, columns=columns)
+                return df
+
+            except Exception as e:
+                print(f"取得公司基本資訊失敗: {e}")
+                return e
 
 
     # 取得公司的開高低收、市值、本益比、beta(stock)
@@ -132,7 +182,34 @@ class Database:
                 print(f"取得 Daily Stock 失敗: {e}")
                 return e
 
-    # 取得公司的財報(factorvalue)
+    # 取得財報資料(financialindicatorvalue)
+    async def get_fundamental(self):
+        async with self.async_session() as session:
+            try:
+                stmt = (
+                    select(
+                        FinancialReportIndicatorValue.date,
+                        FinancialReportIndicatorValue.release_date,
+                        Company.symbol.label("company_symbol"),
+                        SingleIndicator.tw_indicator.label("indicator_name"),
+                        FinancialReportIndicatorValue.indicator_value
+                    )
+                    .join(SingleIndicator, FinancialReportIndicatorValue.indicator_id == SingleIndicator.id)
+                    .join(Company, FinancialReportIndicatorValue.company_id == Company.id)
+                    .where(Company.exchange_name == 'TWSE')
+                )
+                result = await session.execute(stmt)
+                data = result.all()
+                columns = ["date", "release_date", "company_symbol", "indicator_name", "indicator_value"]
+                df = CustomDataFrame(data, columns=columns)
+                return df
+                          
+            except Exception as e:
+                print(f"取得財報資料失敗: {e}")
+                return e
+            
+
+    # 取得公司的財務指標(factorvalue)
     async def get_finance_report(self):
         async with self.async_session() as session:
             try:
@@ -157,7 +234,7 @@ class Database:
                 return df
 
             except Exception as e:
-                print(f"取得 Finance Report 失敗: {e}")
+                print(f"取得財務比指標失敗: {e}")
                 return e
 
     # 取得台股加權指數(taiex)
@@ -184,7 +261,8 @@ class Database:
             except Exception as e:
                 print(f"取得 Taiex 失敗: {e}")
                 return e
-            
+
+    # 取得台股加權報酬指數(adjusted_taiex)  
     async def get_adjusted_taiex_data(self):
         async with self.async_session() as session:
             try:
@@ -201,7 +279,7 @@ class Database:
                 return df
 
             except Exception as e:
-                print(f"取得 Taiex 失敗: {e}")
+                print(f"取得 Adjusted Taiex 失敗: {e}")
                 return e
 
     async def dispose(self):
