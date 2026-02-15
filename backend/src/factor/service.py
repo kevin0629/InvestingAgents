@@ -9,14 +9,19 @@ class FactorService:
     def __init__(self, data_instance):
         self.data = data_instance
 
-    def get_company_all_factors(self, company_symbol: str, end_date: str = None, num: int = 4):
+    def _normalize_end_date(self, end_date):
         if end_date is None:
-            end_date = datetime.now(tz=ZoneInfo("Asia/Taipei")).date()
+            return datetime.now(tz=ZoneInfo("Asia/Taipei")).date()
+        if isinstance(end_date, datetime):
+            return end_date.date()
+        if hasattr(end_date, "year") and hasattr(end_date, "month") and hasattr(end_date, "day"):
+            return end_date
+        return datetime.fromisoformat(end_date).date()
 
-        end_date = datetime.fromisoformat(end_date).date()
-        
+    def get_company_all_factors(self, company_symbol: str, end_date: str = None, num: int = 4):
+        end_date = self._normalize_end_date(end_date)        
         data = get_each_company_report(self.data.raw_report_data, company_symbol)
-        data = data[(data.index <= end_date) & (data.index > end_date - relativedelta(months=num*3))]
+        data = data[(data.release_date <= end_date) & (data.release_date > end_date - relativedelta(months=num*3))]
         data = self.aggregated(data)
 
         return data
@@ -33,12 +38,11 @@ class FactorService:
             'DSI': '存貨週轉天數',
             'DSO': '應收帳款週轉天數',
             'QRYoY': '季營收年增率',
-            'FCF': '自由現金流',
             'GM': '毛利率',
             'OPM': '營業利益率',
             'PM': '淨利率',
         }
-        disable_list = ["MRYoY", "CRYoY", "ATR", "ER"]
+        disable_list = ["MRYoY", "CRYoY", "ATR", "ER", "FCF"]
 
         # prepare containers for each requested grouping
         containers = {}
@@ -63,13 +67,9 @@ class FactorService:
         return containers
 
     def get_company_factor_by_name(self, company_symbol: str, factor_name: str, end_date: str = None, num: int = 4):   
-        if end_date is None:
-            end_date = datetime.now(tz=ZoneInfo("Asia/Taipei")).date()
-        
-        end_date = datetime.fromisoformat(end_date).date()
-        
+        end_date = self._normalize_end_date(end_date)       
         data = get_each_company_report(self.data.raw_report_data, company_symbol)
-        data = data[(data.index <= end_date) & (data.index > end_date - relativedelta(months=num*3))]
+        data = data[(data.release_date <= end_date) & (data.release_date > end_date - relativedelta(months=num*3))]
         data = data[data["factor_name"].str.upper() == factor_name.upper()]
         
         data = self.aggregated(data)
@@ -79,12 +79,9 @@ class FactorService:
 
 
     def dupont_analysis(self, company_symbol: str, end_date: str = None, num: int = 4):
-        if end_date is None:
-            end_date = datetime.now(tz=ZoneInfo("Asia/Taipei")).date()
-        
-        end_date = datetime.fromisoformat(end_date).date()
+        end_date = self._normalize_end_date(end_date)
         data = get_each_company_report(self.data.raw_report_data, company_symbol)
-        data = data[(data.index <= end_date) & (data.index > end_date - relativedelta(months=num*3))]
+        data = data[(data.release_date <= end_date) & (data.release_date > end_date - relativedelta(months=num*3))]
         
         # 按日期和發布日期分組數據
         date_groups = defaultdict(lambda: {"date": None, "release_date": None, "factors": {}})
