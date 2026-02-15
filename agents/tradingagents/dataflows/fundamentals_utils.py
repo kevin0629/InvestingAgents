@@ -50,13 +50,13 @@ def get_company_by_symbol(company_symbol: str) -> Dict[str, Any]:
     return response.json()
 
 
-def get_company_all_factors(
+def get_company_factors(
     company_symbol: str,
     end_date: Optional[str] = None,
     num: int = 4
 ) -> Dict[str, Any]:
     """
-    獲取公司所有財務比率
+    獲取公司所有財務指標
     
     Args:
         company_symbol: 股票代碼，例如 "2330"
@@ -64,7 +64,7 @@ def get_company_all_factors(
         num: 返回的資料筆數，預設為 4
         
     Returns:
-        包含所有財務比率的字典
+        包含所有財務指標的字典
         
     Raises:
         requests.HTTPError: If API request fails
@@ -89,16 +89,16 @@ def get_factor_by_name(
     num: int = 4
 ) -> Dict[str, Any]:
     """
-    獲取指定財務比率
+    獲取指定財務指標
     
     Args:
         company_symbol: 股票代碼，例如 "2330"
-        factor_name: 財務比率名稱，例如 "ROE", "ROA", "負債比率"
+        factor_name: 財務指標名稱，例如 "ROE", "ROA", "DBR"
         end_date: 結束日期 (YYYY-MM-DD format), 如果為 None 則使用最新資料
         num: 返回的資料筆數，預設為 4
         
     Returns:
-        包含指定財務比率的字典
+        包含指定財務指標的字典
         
     Raises:
         requests.HTTPError: If API request fails
@@ -116,13 +116,13 @@ def get_factor_by_name(
     return response.json()
 
 
-def get_company_indicators(
+def get_company_balance_sheet(
     company_symbol: str,
     end_date: Optional[str] = None,
     num: int = 4
 ) -> Dict[str, Any]:
     """
-    獲取公司所有財務指標
+    獲取公司資產負債表資料
     
     Args:
         company_symbol: 股票代碼，例如 "2330"
@@ -130,13 +130,13 @@ def get_company_indicators(
         num: 返回的資料筆數，預設為 4
         
     Returns:
-        包含所有財務指標的字典
+        包含所有資產負債表資料的字典
         
     Raises:
         requests.HTTPError: If API request fails
     """
     base_url = get_backend_base_url()
-    url = f"{base_url}/indicator/{company_symbol}"
+    url = f"{base_url}/indicator/{company_symbol}/balance_sheet"
     
     params = {"num": num}
     if end_date:
@@ -147,30 +147,89 @@ def get_company_indicators(
     
     return response.json()
 
-
-def get_indicator_by_name(
+def get_company_income_statement(
     company_symbol: str,
-    indicator_name: str,
     end_date: Optional[str] = None,
     num: int = 4
 ) -> Dict[str, Any]:
     """
-    獲取指定財務指標
+    獲取公司損益表資料
     
     Args:
         company_symbol: 股票代碼，例如 "2330"
-        indicator_name: 指標名稱，例如 "現金及約當現金", "短期投資", "長期投資"
         end_date: 結束日期 (YYYY-MM-DD format), 如果為 None 則使用最新資料
         num: 返回的資料筆數，預設為 4
         
     Returns:
-        包含指定財務指標的字典
+        包含所有損益表資料的字典
         
     Raises:
         requests.HTTPError: If API request fails
     """
     base_url = get_backend_base_url()
-    url = f"{base_url}/indicator/{company_symbol}/{indicator_name}"
+    url = f"{base_url}/indicator/{company_symbol}/income_statement"
+    
+    params = {"num": num}
+    if end_date:
+        params["end_date"] = end_date
+    
+    response = requests.get(url, params=params)
+    response.raise_for_status()
+    
+    return response.json()
+
+def get_company_cash_flow_statement(
+    company_symbol: str,
+    end_date: Optional[str] = None,
+    num: int = 4
+) -> Dict[str, Any]:
+    """
+    獲取公司現金流量表資料
+    
+    Args:
+        company_symbol: 股票代碼，例如 "2330"
+        end_date: 結束日期 (YYYY-MM-DD format), 如果為 None 則使用最新資料
+        num: 返回的資料筆數，預設為 4
+        
+    Returns:
+        包含所有現金流量表資料的字典
+        
+    Raises:
+        requests.HTTPError: If API request fails
+    """
+    base_url = get_backend_base_url()
+    url = f"{base_url}/indicator/{company_symbol}/cash_flow_statement"
+    
+    params = {"num": num}
+    if end_date:
+        params["end_date"] = end_date
+    
+    response = requests.get(url, params=params)
+    response.raise_for_status()
+    
+    return response.json()
+
+def get_company_monthly_revenue(
+    company_symbol: str,
+    end_date: Optional[str] = None,
+    num: int = 4
+) -> Dict[str, Any]:
+    """
+    獲取公司月營收資料
+    
+    Args:
+        company_symbol: 股票代碼，例如 "2330"
+        end_date: 結束日期 (YYYY-MM-DD format), 如果為 None 則使用最新資料
+        num: 返回的資料筆數，預設為 4
+        
+    Returns:
+        包含所有月營收的字典
+        
+    Raises:
+        requests.HTTPError: If API request fails
+    """
+    base_url = get_backend_base_url()
+    url = f"{base_url}/indicator/{company_symbol}/monthly_revenue"
     
     params = {"num": num}
     if end_date:

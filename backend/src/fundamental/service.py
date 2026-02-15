@@ -158,8 +158,8 @@ class IndicatorService:
         data = data[(data.release_date <= end_date) & (data.release_date > end_date - relativedelta(months=num*3))]
         indicator_list = [
             "營業收入",
-            "營業毛利",
             "營業成本",
+            "營業毛利",
             "營業費用",
             "研究發展費用",
             "營業利益",

@@ -1,6 +1,7 @@
 from langchain_core.tools import tool
 from typing import Annotated
 from tradingagents.dataflows.interface import route_to_vendor
+from tradingagents.dataflows.news_utils import search_news_for_agent
 
 @tool
 def get_news(
@@ -51,3 +52,22 @@ def get_insider_transactions(
         str: A report of insider transaction data
     """
     return route_to_vendor("get_insider_transactions", ticker)
+
+
+@tool
+def search_tavily_news(
+    query: Annotated[str, "News search query, e.g. 'TSMC earnings and guidance'"],
+    max_results: Annotated[int, "Maximum number of results to return"] = 5,
+    search_depth: Annotated[str, "Search depth: basic, advanced, fast, ultra-fast"] = "basic",
+    end_date: Annotated[str, "Optional end date in yyyy-mm-dd format"] = None,
+) -> str:
+    """
+    Search latest news with Tavily and return an LLM-friendly markdown summary.
+    Requires TAVILY_API_KEY in environment variables.
+    """
+    return search_news_for_agent(
+        query=query,
+        max_results=max_results,
+        search_depth=search_depth,
+        end_date=end_date,
+    )

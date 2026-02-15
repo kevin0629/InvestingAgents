@@ -32,6 +32,7 @@ dependencies = [
     "typing-extensions>=4.14.0",
     "yfinance>=0.2.63",
     "qdrant-client>=1.16.2",
+    "tavily-python>=0.7.21",
 ]
 
 [project.scripts]
