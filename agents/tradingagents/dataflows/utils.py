@@ -37,3 +37,7 @@ def get_next_weekday(date):
         return next_weekday
     else:
         return date
+    
+def get_backend_base_url() -> str:
+    """Get the backend base URL from environment or default."""
+    return os.getenv("BACKEND_API_URL", "http://localhost:8000")

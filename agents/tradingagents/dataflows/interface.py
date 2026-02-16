@@ -13,6 +13,7 @@ from .fundamentals_utils import (
     get_dupont_analysis,
     get_stock_river_chart
 )
+from .backtest_utils import get_strategy, get_backtest_report
 
 # Configuration and routing logic
 from .config import get_config
@@ -43,6 +44,13 @@ TOOLS_CATEGORIES = {
         "description": "News data",
         "tools": [
             "search_news"
+        ]
+    },
+    "backtest_data": {
+        "description": "Backtesting strategy and reports",
+        "tools": [
+            "get_strategy",
+            "get_backtest_report"
         ]
     }
 }
@@ -89,6 +97,13 @@ VENDOR_METHODS = {
     "search_news": {
         "myself": search_news_for_agent,
     },
+    # backtest_data
+    "get_strategy": {
+        "myself": get_strategy,
+    },
+    "get_backtest_report": {
+        "myself": get_backtest_report,
+    }
 }
 
 def get_category_for_method(method: str) -> str:

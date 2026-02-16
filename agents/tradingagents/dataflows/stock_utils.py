@@ -1,12 +1,8 @@
 import requests
-import os
-from typing import Optional, Dict, Any
+from typing import Optional
 from io import BytesIO
 import matplotlib.pyplot as plt
-
-def get_backend_base_url() -> str:
-    """Get the backend base URL from environment or default."""
-    return os.getenv("BACKEND_API_URL", "http://localhost:8000")
+from .utils import get_backend_base_url
 
 
 def get_taiex_chart(end_date: Optional[str] = None) -> bytes:

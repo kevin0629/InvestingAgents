@@ -19,6 +19,10 @@ from tradingagents.agents.utils.fundamental_data_tools import (
 from tradingagents.agents.utils.news_data_tools import (
     search_news
 )
+from tradingagents.agents.utils.backtest_tools import (
+    get_strategy,
+    get_backtest_report
+)
 
 def create_msg_delete():
     def delete_messages(state):

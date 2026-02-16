@@ -20,7 +20,7 @@ class BacktestService:
     AVAILABLE_STRATEGIES = {
         "revenue_growth_roe": {
             "name": "revenue_growth_roe",
-            "description": "穩健營收動能策略：篩選營收成長>24%、負債比<70%、自由現金流>0、流動比率>100%、EPS>0、ROE>0%的股票，並選取ROE最高的30檔",
+            "description": "穩健營收動能策略: 篩選營收成長>24%、負債比<70%、自由現金流>0、流動比率>100%、EPS>0、ROE>0%的股票，並選取ROE最高的30檔",
             "parameters": {
                 "mryoy_threshold": 24,
                 "dbr_threshold": 70,
@@ -277,7 +277,7 @@ class BacktestService:
 
             holdings.append(HoldingInfo(
                 stock_id=str(idx) if isinstance(idx, (str, int)) else None,
-                position=float(row.get('position')) if pd.notna(row.get('position')) else None,
+                position=float(round(row.get('position'), 4)) if pd.notna(row.get('position')) else None,
                 entry_date=str(row.get('entry_date'))[:10] if pd.notna(row.get('entry_date')) else None,
                 entry_price=float(entry_price) if entry_price is not None else None,
             ))

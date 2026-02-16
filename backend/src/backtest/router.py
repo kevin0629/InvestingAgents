@@ -57,12 +57,6 @@ async def get_strategy():
     - 策略名稱
     - 策略描述
     - 預設參數
-    
-    目前可用策略：
-    - **revenue_growth_roe**: 穩健營收動能策略
-      - 篩選條件：營收成長>24%、負債比<70%、自由現金流>0、流動比率>100%、EPS>0、ROE>0
-      - 選股方式：選取 ROE 最高的 30 檔
-      - 調倉頻率：每月 10 號（或最近交易日）
     """
     try:
         data = get_data_instance()

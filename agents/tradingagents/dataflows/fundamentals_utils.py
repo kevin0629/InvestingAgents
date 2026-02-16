@@ -1,12 +1,9 @@
 import requests
-import os
 from typing import Optional, Dict, Any
 import pandas as pd
+from .utils import get_backend_base_url
 
 
-def get_backend_base_url() -> str:
-    """Get the backend base URL from environment or default."""
-    return os.getenv("BACKEND_API_URL", "http://localhost:8000")
 
 def get_company_by_symbol(company_symbol: str) -> str:
     """
@@ -301,7 +298,7 @@ def get_stock_river_chart(
 if __name__ == "__main__":
     # Example usage
     company_symbol = "3491"
-    # print(get_company_by_symbol(company_symbol))
+    print(get_company_by_symbol(company_symbol))
     # print(get_company_all_factors(company_symbol))
     # print(get_factor_by_name(company_symbol, "ROE"))
     # print(get_company_balance_sheet(company_symbol))
