@@ -4,7 +4,7 @@ from src.fundamental.service import IndicatorService
 from typing import Optional
 from src.utils import get_data_instance
 
-router = APIRouter(prefix="/fundmental", tags=["fundmental"])
+router = APIRouter(prefix="/fundamental", tags=["fundamental"])
 
 @router.get("/{company_symbol}/balance_sheet", response_model=IndicatorResponse)
 async def get_company_balance_sheet(

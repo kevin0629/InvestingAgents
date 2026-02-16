@@ -73,14 +73,13 @@ def search_news(
 
 def search_news_for_agent(
     query: str,
-    search_depth: Literal["basic", "advanced", "fast", "ultra-fast"] = "basic",
     max_results: int = 5,
     end_date: Optional[str] = None,
 ) -> str:
     """Return Tavily news search results in an LLM-friendly markdown string."""
     response = search_news(
         query=query,
-        search_depth=search_depth,
+        search_depth="basic",
         max_results=max_results,
         end_date=end_date,
     )

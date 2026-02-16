@@ -209,7 +209,7 @@ class IndicatorService:
         end_date = self._normalize_end_date(end_date)
         data = get_each_company_fundamental(self.data.raw_fundamental, company_symbol)
         data1 = get_each_company_report(self.data.raw_report_data, company_symbol)
-        data = data[(data.release_date <= end_date) & (data.release_date > end_date - relativedelta(months=num*6))]
+        data = data[(data.release_date <= end_date) & (data.release_date > end_date - relativedelta(months=(int(num/4)+1)*12))]
         data1 = data1[(data1.release_date <= end_date) & (data1.release_date > end_date - relativedelta(months=num*3))]
 
         indicator_list = ["當月營收", "月營收年增率", "累計營收", "累積營收年增率"]
