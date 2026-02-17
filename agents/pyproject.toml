@@ -33,6 +33,7 @@ dependencies = [
     "yfinance>=0.2.63",
     "qdrant-client>=1.16.2",
     "tavily-python>=0.7.21",
+    "matplotlib>=3.10.8",
 ]
 
 [project.scripts]

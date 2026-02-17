@@ -22,10 +22,10 @@ DEFAULT_CONFIG = {
     # Data vendor configuration
     # Category-level configuration (default for all tools in category)
     "data_vendors": {
-        "core_stock_apis": "yfinance",       # Options: alpha_vantage, yfinance
-        "technical_indicators": "yfinance",  # Options: alpha_vantage, yfinance
-        "fundamental_data": "yfinance",      # Options: alpha_vantage, yfinance
-        "news_data": "yfinance",             # Options: alpha_vantage, yfinance
+        "stock_data": "myself",       # Options: alpha_vantage, yfinance
+        "fundamental_data": "myself",      # Options: alpha_vantage, yfinance
+        "news_data": "myself",             # Options: alpha_vantage, yfinance
+        "backtest_data": "myself",          # Options: alpha_vantage, yfinance
     },
     # Tool-level configuration (takes precedence over category-level)
     "tool_vendors": {
