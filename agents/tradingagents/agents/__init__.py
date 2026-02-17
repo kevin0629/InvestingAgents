@@ -7,8 +7,8 @@ from .analysts.technical_analyst import create_market_analyst
 from .analysts.news_analyst import create_news_analyst
 
 from .managers.coordinator import create_coordinator
-from .managers.critic import create_critic
-from .managers.portfolio_manager import create_portfolio_manager
+from .critic.critic import create_critic
+from .trader.portfolio_manager import create_portfolio_manager
 
 from .researchers.bear_researcher import create_bear_researcher
 from .researchers.bull_researcher import create_bull_researcher
