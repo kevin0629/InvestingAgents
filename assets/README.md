@@ -8,89 +8,6 @@ Agent Framework: Python + Langchain v1.0、LangGraph v1.0、langfuse
 向量資料庫: Qdrant
 資料庫: PostgreSQL
 ## 系統功能
-### 後端 API
-
-以下列出目前後端主要的 REST API 路由，包含路徑、方法、參數與回傳說明，供開發使用。
-
-- **Base URL:** `http://<host>:<port>`（預設啟動命令：`uvicorn src.main:app --reload`）
-
-- **通用說明:**
-	- 日期格式：若有 `end_date` 參數，格式為 `YYYY-MM-DD`。
-
----
-
-**Company (公司資訊)**
-- `GET /company/`
-	- 說明：取得公司列表。
-	- 回傳：`CompanyListResponse`（公司清單與基本欄位）。
-- `GET /company/{company_symbol}`
-	- 說明：透過股票代碼取得公司詳細資訊。
-	- 路徑參數：`company_symbol`（string）
-	- 回傳：`CompanyResponse`，若找不到回傳 404。
-
----
-
-**Factor (財務因子 / 因子分析)**
-- `GET /factor/{company_symbol}`
-	- 說明：取得公司多期財務因子資料。
-	- 查詢參數：`end_date` (optional, YYYY-MM-DD), `num` (int, default=4)
-	- 回傳：`FactorResponse`（多期因子數據）。
-- `GET /factor/{company_symbol}/dupont`
-	- 說明：取得杜邦分析（DuPont）資料（ROE 拆解）。
-	- 查詢參數：`end_date` (optional), `num` (default=4)
-	- 回傳：`DuPontAnalysisResponse`，找不到資料會回 404。
-- `GET /factor/{company_symbol}/{factor_name}`
-	- 說明：取得指定因子（例如 EPS、ROE、毛利率 等）之歷史資料。
-	- 路徑參數：`factor_name`（string）
-	- 查詢參數：`end_date`, `num`
-
----
-
-**Indicator (技術指標)**
-- `GET /indicator/{company_symbol}`
-	- 說明：取得公司多期技術指標（預設最新 4 期，可用 `num` 調整）。
-	- 查詢參數：`end_date` (optional), `num` (int, default=4)
-	- 回傳：`IndicatorResponse`。
-- `GET /indicator/{company_symbol}/{indicator_name}`
-	- 說明：取得特定技術指標（如 MACD、RSI 等）之歷史值。
-	- 路徑參數：`indicator_name`（string）
-
----
-
-**Stock (股價與圖表相關)**
-- `GET /stock/taiex/chart`
-	- 說明：取得台灣加權指數（TAIEX）K 線圖（PNG 圖像）。
-	- 查詢參數：`end_date` (optional)
-	- 回傳：PNG 圖像 (`image/png`)。
-- `GET /stock/{company_symbol}/chart`
-	- 說明：取得個股 K 線圖（PNG），包含成交量與移動平均線。
-	- 路徑參數：`company_symbol`
-	- Query param：由 `StockChartQueryParams` 決定（例如時間範圍、移動平均天數等）。
-	- 回傳：PNG 圖像 (`image/png`)。
-- `GET /stock/{company_symbol}/river`
-	- 說明：取得本益比河流圖（PE River），回傳 PNG 圖像。
-
----
-
-**Backtest (回測相關)**
-- `GET /backtest/report`
-	- 說明：對指定策略執行回測並回傳績效報告、持股與交易紀錄。
-	- 查詢參數：`strategy_name` (required), `end_date` (optional, YYYY-MM-DD)
-	- 回傳：`BacktestReportResponse`（包含年化報酬、夏普、最大回撤、目前持股與交易清單等）。
-- `GET /backtest/strategy`
-	- 說明：取得系統內可用的量化策略列表與描述。
-	- 回傳：`StrategyListResponse`（策略名稱、描述、預設參數）。
-
----
-
-如需更多細節（response schema、欄位名稱與範例 payload），可參考程式碼中對應的 `schemas.py` 與 `service` 實作，路徑示例：
-- [backend/src/company/router.py](backend/src/company/router.py#L1-L50)
-- [backend/src/factor/router.py](backend/src/factor/router.py#L1-L120)
-- [backend/src/indicator/router.py](backend/src/indicator/router.py#L1-L120)
-- [backend/src/stock/router.py](backend/src/stock/router.py#L1-L200)
-- [backend/src/backtest/router.py](backend/src/backtest/router.py#L1-L200)
-
-如果你希望我把每個 response schema 展開成欄位說明與範例 JSON，我可以再自動抓取 `schemas.py` 並補上範例。 
 
 ### agent
 agent 規劃如下圖所示
@@ -423,7 +340,7 @@ JSON 結構範例：
 2. **回顧驗證 (VERIFICATION)**：檢驗過去的新聞預測是否成真（例如：擴廠釋出利多訊號，實際是否發生？）。
 
 ### 工具使用指引
-你必須主動使用 `web_search` 工具。在執行分析前，請先針對以下項目構思搜尋關鍵字：
+你必須主動使用 `search_news` 工具。在執行分析前，請先針對以下項目構思搜尋關鍵字：
 - 針對擴張事件
 - 針對新產品/技術
 - 針對宏觀趨勢

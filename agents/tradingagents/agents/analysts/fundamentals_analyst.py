@@ -1,63 +1,124 @@
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-import time
 import json
-from tradingagents.agents.utils.agent_utils import get_fundamentals, get_balance_sheet, get_cashflow, get_income_statement, get_insider_transactions
-from tradingagents.dataflows.config import get_config
+from typing import Any, Dict, List
+
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+
+from tradingagents.agents.utils.agent_utils import (
+    get_balance_sheet,
+    get_cashflow,
+    get_company_info,
+    get_dupont_analysis,
+    get_factors,
+    get_income_statement,
+    get_monthly_revenue,
+    get_river_chart,
+)
+
+
+def _safe_json(content: str) -> Dict[str, Any]:
+    text = (content or "").strip()
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end >= start:
+        text = text[start:end + 1]
+    return json.loads(text)
+
+
+def _run_with_tools(llm, system_prompt: str, user_prompt: str, tools: List, max_steps: int = 4) -> str:
+    messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
+    bound = llm.bind_tools(tools)
+    tool_map = {tool.name: tool for tool in tools}
+
+    for _ in range(max_steps):
+        ai_msg = bound.invoke(messages)
+        messages.append(ai_msg)
+        if not getattr(ai_msg, "tool_calls", None):
+            return ai_msg.content
+
+        for tool_call in ai_msg.tool_calls:
+            tool_name = tool_call["name"]
+            tool_args = tool_call.get("args", {})
+            tool_fn = tool_map[tool_name]
+            try:
+                tool_result = tool_fn.invoke(tool_args)
+            except Exception as exc:
+                tool_result = f"ToolError({tool_name}): {exc}"
+            messages.append(
+                ToolMessage(
+                    content=str(tool_result)[:12000],
+                    tool_call_id=tool_call["id"],
+                )
+            )
+
+    final = llm.invoke(messages)
+    return final.content
 
 
 def create_fundamentals_analyst(llm):
     def fundamentals_analyst_node(state):
-        current_date = state["trade_date"]
-        ticker = state["company_of_interest"]
-        company_name = state["company_of_interest"]
-
+        plan = state.get("coordinator_plan", {})
+        tasks = [
+            t for t in plan.get("tasks", []) if t.get("agent") == "Financial_Analyst"
+        ]
         tools = [
-            get_fundamentals,
+            get_company_info,
+            get_factors,
             get_balance_sheet,
             get_cashflow,
             get_income_statement,
+            get_monthly_revenue,
+            get_dupont_analysis,
+            get_river_chart,
         ]
 
-        system_message = (
-            "You are a researcher tasked with analyzing fundamental information over the past week about a company. Please write a comprehensive report of the company's fundamental information such as financial documents, company profile, basic company financials, and company financial history to gain a full view of the company's fundamental information to inform traders. Make sure to include as much detail as possible. Do not simply state the trends are mixed, provide detailed and finegrained analysis and insights that may help traders make decisions."
-            + " Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."
-            + " Use the available tools: `get_fundamentals` for comprehensive company analysis, `get_balance_sheet`, `get_cashflow`, and `get_income_statement` for specific financial statements.",
-        )
+        system_prompt = """
+你是 Financial Analyst。
+請依 task_type 產出 JSON：
+- ANALYSIS: 評估成長、風險、估值位階，輸出 signal/confidence/valuation/key_observations/financial_anomaly/investment_thesis。
+- VERIFICATION: 驗證 past_rationale 是否兌現，再補前瞻分析，輸出包含 verification + analysis。
+必須只輸出 JSON。
+""".strip()
 
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                (
-                    "system",
-                    "You are a helpful AI assistant, collaborating with other assistants."
-                    " Use the provided tools to progress towards answering the question."
-                    " If you are unable to fully answer, that's OK; another assistant with different tools"
-                    " will help where you left off. Execute what you can to make progress."
-                    " If you or any other assistant has the FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL** or deliverable,"
-                    " prefix your response with FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL** so the team knows to stop."
-                    " You have access to the following tools: {tool_names}.\n{system_message}"
-                    "For your reference, the current date is {current_date}. The company we want to look at is {ticker}",
-                ),
-                MessagesPlaceholder(variable_name="messages"),
-            ]
-        )
+        reports = []
+        for task in tasks:
+            ticker = task.get("ticker", state.get("company_of_interest", ""))
+            payload = {
+                "task": task,
+                "ticker": ticker,
+                "trade_date": state.get("trade_date"),
+            }
+            try:
+                content = _run_with_tools(
+                    llm,
+                    system_prompt,
+                    json.dumps(payload, ensure_ascii=False),
+                    tools,
+                )
+                parsed = _safe_json(content)
+            except Exception as exc:
+                parsed = {
+                    "ticker": ticker,
+                    "is_holding": task.get("task_type") == "VERIFICATION",
+                    "verification": None,
+                    "analysis": {
+                        "signal": "中立/觀望",
+                        "valuation": "Unknown",
+                        "reasoning": f"Financial analysis fallback: {exc}",
+                        "risk_alert": "資料不足，需人工覆核",
+                    },
+                }
 
-        prompt = prompt.partial(system_message=system_message)
-        prompt = prompt.partial(tool_names=", ".join([tool.name for tool in tools]))
-        prompt = prompt.partial(current_date=current_date)
-        prompt = prompt.partial(ticker=ticker)
-
-        chain = prompt | llm.bind_tools(tools)
-
-        result = chain.invoke(state["messages"])
-
-        report = ""
-
-        if len(result.tool_calls) == 0:
-            report = result.content
+            reports.append(
+                {
+                    "ticker": ticker,
+                    "task_type": task.get("task_type", "ANALYSIS"),
+                    "report": parsed,
+                }
+            )
 
         return {
-            "messages": [result],
-            "fundamentals_report": report,
+            "financial_reports": reports,
+            "fundamentals_report": json.dumps(reports, ensure_ascii=False),
         }
 
     return fundamentals_analyst_node

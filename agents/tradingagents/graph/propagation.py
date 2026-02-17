@@ -1,11 +1,6 @@
 # TradingAgents/graph/propagation.py
 
 from typing import Dict, Any, List, Optional
-from tradingagents.agents.utils.agent_states import (
-    AgentState,
-    InvestDebateState,
-    RiskDebateState,
-)
 
 
 class Propagator:
@@ -16,29 +11,30 @@ class Propagator:
         self.max_recur_limit = max_recur_limit
 
     def create_initial_state(
-        self, company_name: str, trade_date: str
+        self, company_name: str, trade_date: str, user_request: str = ""
     ) -> Dict[str, Any]:
         """Create the initial state for the agent graph."""
+        request = user_request or company_name
         return {
             "messages": [("human", company_name)],
+            "user_request": request,
             "company_of_interest": company_name,
             "trade_date": str(trade_date),
-            "investment_debate_state": InvestDebateState(
-                {"history": "", "current_response": "", "count": 0}
-            ),
-            "risk_debate_state": RiskDebateState(
-                {
-                    "history": "",
-                    "current_aggressive_response": "",
-                    "current_conservative_response": "",
-                    "current_neutral_response": "",
-                    "count": 0,
-                }
-            ),
+            "mode": "single",
+            "market_regime": "Neutral",
+            "coordinator_plan": {},
+            "financial_reports": [],
+            "technical_reports": [],
+            "news_reports": [],
+            "critic_reflections": [],
+            "portfolio_decision": {},
             "market_report": "",
             "fundamentals_report": "",
             "sentiment_report": "",
             "news_report": "",
+            "investment_plan": "",
+            "trader_investment_plan": "",
+            "final_trade_decision": "",
         }
 
     def get_graph_args(self, callbacks: Optional[List] = None) -> Dict[str, Any]:

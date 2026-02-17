@@ -10,7 +10,7 @@ def get_stock_data(
     time_frame: Annotated[str, "Time frame for stock data (e.g. 'D', 'W', 'M')"] = "D"
 ) -> bytes:
     """
-    Retrieve stock price data (OHLCV) and indicator data (MA20、MA60、MA240、BBAND、RSI) for a given ticker symbol.
+    Retrieve stock price data (OHLCV) and indicator data (MA20、MA60、MA240、BBAND、MACD、RSI) for a given ticker symbol.
 
     Args:
         symbol (str): Ticker symbol of the company, e.g. 2330, 2455, 3491

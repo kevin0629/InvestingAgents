@@ -1,59 +1,103 @@
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-import time
 import json
-from tradingagents.agents.utils.agent_utils import get_news, get_global_news, search_tavily_news
-from tradingagents.dataflows.config import get_config
+from typing import Any, Dict, List
+
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+
+from tradingagents.agents.utils.agent_utils import search_news
+
+
+def _safe_json(content: str) -> Dict[str, Any]:
+    text = (content or "").strip()
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end >= start:
+        text = text[start:end + 1]
+    return json.loads(text)
+
+
+def _run_with_tools(llm, system_prompt: str, user_prompt: str, tools: List, max_steps: int = 4) -> str:
+    messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
+    bound = llm.bind_tools(tools)
+    tool_map = {tool.name: tool for tool in tools}
+
+    for _ in range(max_steps):
+        ai_msg = bound.invoke(messages)
+        messages.append(ai_msg)
+        if not getattr(ai_msg, "tool_calls", None):
+            return ai_msg.content
+
+        for tool_call in ai_msg.tool_calls:
+            tool_name = tool_call["name"]
+            tool_args = tool_call.get("args", {})
+            tool_fn = tool_map[tool_name]
+            try:
+                tool_result = tool_fn.invoke(tool_args)
+            except Exception as exc:
+                tool_result = f"ToolError({tool_name}): {exc}"
+            messages.append(
+                ToolMessage(
+                    content=str(tool_result)[:12000],
+                    tool_call_id=tool_call["id"],
+                )
+            )
+
+    final = llm.invoke(messages)
+    return final.content
 
 
 def create_news_analyst(llm):
     def news_analyst_node(state):
-        current_date = state["trade_date"]
-        ticker = state["company_of_interest"]
+        plan = state.get("coordinator_plan", {})
+        tasks = [t for t in plan.get("tasks", []) if t.get("agent") == "News_Analyst"]
+        tools = [search_news]
 
-        tools = [
-            get_news,
-            get_global_news,
-            search_tavily_news,
-        ]
+        system_prompt = """
+你是 News Analyst。你必須主動使用 search_news 工具。
+請依 task_type 輸出 JSON：
+- ANALYSIS: signal/confidence_score/impact_timeline/key_findings/risk_factors/source_links。
+- VERIFICATION: verification_status/reality_check/news_evidence/source_links。
+必須只輸出 JSON。
+""".strip()
 
-        system_message = (
-            "You are a news researcher tasked with analyzing recent news and trends over the past week. Please write a comprehensive report of the current state of the world that is relevant for trading and macroeconomics. Use the available tools: get_news(query, start_date, end_date) for company-specific or targeted news searches, get_global_news(curr_date, look_back_days, limit) for broader macroeconomic news, and search_tavily_news(query, max_results, search_depth, end_date) for fresh web/news coverage with Tavily. Do not simply state the trends are mixed, provide detailed and finegrained analysis and insights that may help traders make decisions."
-            + """ Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."""
-        )
+        reports = []
+        for task in tasks:
+            ticker = task.get("ticker", state.get("company_of_interest", ""))
+            payload = {
+                "task": task,
+                "ticker": ticker,
+                "trade_date": state.get("trade_date"),
+            }
+            try:
+                content = _run_with_tools(
+                    llm,
+                    system_prompt,
+                    json.dumps(payload, ensure_ascii=False),
+                    tools,
+                )
+                parsed = _safe_json(content)
+                if "source_links" not in parsed:
+                    parsed["source_links"] = []
+            except Exception as exc:
+                parsed = {
+                    "signal": "中性",
+                    "confidence_score": 3,
+                    "impact_timeline": "Unclear",
+                    "key_findings": {"summary": f"News analysis fallback: {exc}"},
+                    "risk_factors": "資料不足，需人工覆核",
+                    "source_links": [],
+                }
 
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                (
-                    "system",
-                    "You are a helpful AI assistant, collaborating with other assistants."
-                    " Use the provided tools to progress towards answering the question."
-                    " If you are unable to fully answer, that's OK; another assistant with different tools"
-                    " will help where you left off. Execute what you can to make progress."
-                    " If you or any other assistant has the FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL** or deliverable,"
-                    " prefix your response with FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL** so the team knows to stop."
-                    " You have access to the following tools: {tool_names}.\n{system_message}"
-                    "For your reference, the current date is {current_date}. We are looking at the company {ticker}",
-                ),
-                MessagesPlaceholder(variable_name="messages"),
-            ]
-        )
-
-        prompt = prompt.partial(system_message=system_message)
-        prompt = prompt.partial(tool_names=", ".join([tool.name for tool in tools]))
-        prompt = prompt.partial(current_date=current_date)
-        prompt = prompt.partial(ticker=ticker)
-
-        chain = prompt | llm.bind_tools(tools)
-        result = chain.invoke(state["messages"])
-
-        report = ""
-
-        if len(result.tool_calls) == 0:
-            report = result.content
+            reports.append(
+                {
+                    "ticker": ticker,
+                    "task_type": task.get("task_type", "ANALYSIS"),
+                    "report": parsed,
+                }
+            )
 
         return {
-            "messages": [result],
-            "news_report": report,
+            "news_reports": reports,
+            "news_report": json.dumps(reports, ensure_ascii=False),
         }
 
     return news_analyst_node
