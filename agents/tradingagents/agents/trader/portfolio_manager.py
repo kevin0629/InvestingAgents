@@ -1,5 +1,6 @@
 import json
 from typing import Any, Dict
+from tradingagents.agents.utils.execution_logger import AgentExecutionLogger
 
 
 def _safe_json(content: str) -> Dict[str, Any]:
@@ -13,8 +14,15 @@ def _safe_json(content: str) -> Dict[str, Any]:
 
 def create_portfolio_manager(llm):
     def portfolio_manager_node(state):
+        run_id = state.get("run_id", "")
         mode = str(state.get("mode", "single")).upper()
         market_regime = state.get("market_regime", "Neutral")
+        AgentExecutionLogger.log_event(
+            run_id,
+            "node_start",
+            "Portfolio Manager",
+            {"mode": mode, "market_regime": market_regime},
+        )
 
         analysis_reports = {
             "financial": state.get("financial_reports", []),
@@ -68,6 +76,16 @@ BATCH 模式輸出：
                     ("human", json.dumps(payload, ensure_ascii=False)),
                 ]
             )
+            AgentExecutionLogger.log_event(
+                run_id,
+                "llm_output",
+                "Portfolio Manager",
+                {
+                    "content": response.content,
+                    "reasoning_trace": getattr(response, "reasoning_content", None)
+                    or getattr(response, "additional_kwargs", {}).get("reasoning"),
+                },
+            )
             decision = _safe_json(response.content)
         except Exception as exc:
             if mode == "BATCH":
@@ -93,6 +111,7 @@ BATCH 模式輸出：
                     "risk_alert": "資料不足，需人工覆核",
                 }
 
+        AgentExecutionLogger.log_event(run_id, "node_output", "Portfolio Manager", {"decision": decision})
         return {
             "portfolio_decision": decision,
             "investment_plan": json.dumps(decision, ensure_ascii=False),

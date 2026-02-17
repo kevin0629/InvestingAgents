@@ -1,9 +1,12 @@
 import json
 import os
 from pathlib import Path
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from tradingagents.agents.utils.memory import FinancialSituationMemory
+from tradingagents.agents.utils.execution_logger import AgentExecutionLogger
+from tradingagents.agents.utils.langfuse_tracing import create_langfuse_callback
 from tradingagents.dataflows.config import set_config
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.graph.propagation import Propagator
@@ -25,13 +28,16 @@ class TradingAgentsGraph:
     ):
         self.debug = debug
         self.config = config or DEFAULT_CONFIG
-        self.callbacks = callbacks or []
+        self.callbacks = list(callbacks or [])
+
+        langfuse_callback = create_langfuse_callback(
+            trace_name="InvestingAgentsGraph",
+            session_id=self.config.get("langfuse_session_id"),
+        )
+        if langfuse_callback is not None:
+            self.callbacks.append(langfuse_callback)
 
         set_config(self.config)
-        os.makedirs(
-            os.path.join(self.config["project_dir"], "dataflows/data_cache"),
-            exist_ok=True,
-        )
 
         llm_kwargs = self._get_provider_kwargs()
         if self.callbacks:
@@ -83,27 +89,59 @@ class TradingAgentsGraph:
     def propagate(self, company_name: str, trade_date: str, user_request: Optional[str] = None):
         """Run the workflow and return final state + normalized decision."""
         self.ticker = company_name
+        run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         init_agent_state = self.propagator.create_initial_state(
             company_name=company_name,
             trade_date=trade_date,
             user_request=user_request or company_name,
+            run_id=run_id,
         )
-        args = self.propagator.get_graph_args()
+        AgentExecutionLogger.log_event(
+            run_id,
+            "graph_start",
+            "TradingAgentsGraph",
+            {"company": company_name, "trade_date": trade_date, "user_request": user_request or company_name},
+        )
+        args = self.propagator.get_graph_args(callbacks=self.callbacks if self.callbacks else None)
 
         if self.debug:
             trace = []
             for chunk in self.graph.stream(init_agent_state, **args):
                 trace.append(chunk)
+                messages = chunk.get("messages", [])
+                if messages:
+                    last = messages[-1]
+                    tool_calls = getattr(last, "tool_calls", None)
+                    AgentExecutionLogger.log_event(
+                        run_id,
+                        "graph_chunk",
+                        "TradingAgentsGraph",
+                        {
+                            "message_type": last.__class__.__name__,
+                            "content": getattr(last, "content", None),
+                            "tool_calls": tool_calls,
+                        },
+                    )
             final_state = trace[-1] if trace else self.graph.invoke(init_agent_state, **args)
         else:
             final_state = self.graph.invoke(init_agent_state, **args)
 
         self.curr_state = final_state
+        AgentExecutionLogger.log_event(
+            run_id,
+            "graph_end",
+            "TradingAgentsGraph",
+            {
+                "final_trade_decision": final_state.get("final_trade_decision"),
+                "portfolio_decision": final_state.get("portfolio_decision"),
+            },
+        )
         self._log_state(trade_date, final_state)
         return final_state, self.process_signal(final_state.get("final_trade_decision", ""))
 
     def _log_state(self, trade_date: str, final_state: Dict[str, Any]):
         self.log_states_dict[str(trade_date)] = {
+            "run_id": final_state.get("run_id"),
             "company_of_interest": final_state.get("company_of_interest"),
             "trade_date": final_state.get("trade_date"),
             "mode": final_state.get("mode"),

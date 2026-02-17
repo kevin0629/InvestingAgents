@@ -6,6 +6,8 @@ pandas
 yfinance
 stockstats
 langgraph
+langgraph-cli[inmem]
+langfuse
 rank-bm25
 setuptools
 backtrader

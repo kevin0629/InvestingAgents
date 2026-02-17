@@ -1,6 +1,7 @@
 # TradingAgents/graph/propagation.py
 
 from typing import Dict, Any, List, Optional
+from datetime import datetime, timezone
 
 
 class Propagator:
@@ -11,12 +12,14 @@ class Propagator:
         self.max_recur_limit = max_recur_limit
 
     def create_initial_state(
-        self, company_name: str, trade_date: str, user_request: str = ""
+        self, company_name: str, trade_date: str, user_request: str = "", run_id: str = ""
     ) -> Dict[str, Any]:
         """Create the initial state for the agent graph."""
         request = user_request or company_name
+        rid = run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         return {
             "messages": [("human", company_name)],
+            "run_id": rid,
             "user_request": request,
             "company_of_interest": company_name,
             "trade_date": str(trade_date),

@@ -1,5 +1,6 @@
 import json
 from typing import Any, Dict, List
+from tradingagents.agents.utils.execution_logger import AgentExecutionLogger
 
 
 def _safe_json(content: str) -> Dict[str, Any]:
@@ -44,8 +45,15 @@ def _build_fallback_plan(user_request: str, trade_date: str) -> Dict[str, Any]:
 
 def create_coordinator(llm):
     def coordinator_node(state):
+        run_id = state.get("run_id", "")
         user_request = state.get("user_request") or state.get("company_of_interest", "")
         trade_date = state.get("trade_date", "")
+        AgentExecutionLogger.log_event(
+            run_id,
+            "node_start",
+            "Coordinator",
+            {"user_request": user_request, "trade_date": trade_date},
+        )
 
         system_prompt = """
 你是金融研究協調員 Coordinator。
@@ -86,6 +94,12 @@ def create_coordinator(llm):
             plan = _build_fallback_plan(user_request, trade_date)
 
         mode = str(plan.get("mode", "single")).lower()
+        AgentExecutionLogger.log_event(
+            run_id,
+            "node_output",
+            "Coordinator",
+            {"mode": mode, "market_regime": plan.get("market_regime"), "tasks": plan.get("tasks", [])},
+        )
         return {
             "coordinator_plan": plan,
             "mode": mode,

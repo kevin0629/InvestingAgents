@@ -1,5 +1,6 @@
 import json
 from typing import Any, Dict
+from tradingagents.agents.utils.execution_logger import AgentExecutionLogger
 
 
 def _safe_json(content: str) -> Dict[str, Any]:
@@ -13,6 +14,8 @@ def _safe_json(content: str) -> Dict[str, Any]:
 
 def create_critic(llm, memory=None):
     def critic_node(state):
+        run_id = state.get("run_id", "")
+        AgentExecutionLogger.log_event(run_id, "node_start", "Critic", {"coordinator_plan": state.get("coordinator_plan", {})})
         plan = state.get("coordinator_plan", {})
         verification_tasks = [
             task for task in plan.get("tasks", []) if task.get("task_type") == "VERIFICATION"
@@ -63,6 +66,17 @@ def create_critic(llm, memory=None):
                         ("human", json.dumps(payload, ensure_ascii=False)),
                     ]
                 )
+                AgentExecutionLogger.log_event(
+                    run_id,
+                    "llm_output",
+                    "Critic",
+                    {
+                        "ticker": ticker,
+                        "content": response.content,
+                        "reasoning_trace": getattr(response, "reasoning_content", None)
+                        or getattr(response, "additional_kwargs", {}).get("reasoning"),
+                    },
+                )
                 parsed = _safe_json(response.content)
             except Exception as exc:
                 parsed = {
@@ -75,6 +89,7 @@ def create_critic(llm, memory=None):
                 }
 
             reflections.append(parsed)
+            AgentExecutionLogger.log_event(run_id, "node_output", "Critic", {"ticker": ticker, "reflection": parsed})
             if memory is not None:
                 situation = json.dumps(payload, ensure_ascii=False)
                 memory.add_situations([(situation, json.dumps(parsed, ensure_ascii=False))])

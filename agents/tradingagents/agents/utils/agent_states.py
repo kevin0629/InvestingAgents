@@ -3,6 +3,7 @@ from langgraph.graph import MessagesState
 
 
 class AgentState(MessagesState):
+    run_id: Annotated[str, "Unique run identifier for execution logging"]
     user_request: Annotated[str, "Raw user request for coordinator"]
     company_of_interest: Annotated[str, "Primary ticker/company query"]
     trade_date: Annotated[str, "Trade date (YYYY-MM-DD)"]
