@@ -26,10 +26,6 @@ def _provider(config: Dict[str, Any]) -> str:
     return "openai"
 
 
-def _collection_name(config: Dict[str, Any]) -> str:
-    return str(config.get("reflection_collection_name", "critic_reflections"))
-
-
 def _get_embedder(config: Dict[str, Any]):
     global _EMBEDDER, _EMBEDDER_KEY
 
@@ -48,7 +44,7 @@ def _get_embedder(config: Dict[str, Any]):
     if provider == "gemini":
         from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
-        _EMBEDDER = GoogleGenerativeAIEmbeddings(model=model_name)
+        _EMBEDDER = GoogleGenerativeAIEmbeddings(model=model_name, output_dimensionality=1536) # default dimensionality is 3072
     else:
         from langchain_openai import OpenAIEmbeddings
 
@@ -63,82 +59,7 @@ def _get_embedder(config: Dict[str, Any]):
 
 def embed_text(text: str, config: Optional[Dict[str, Any]] = None) -> List[float]:
     resolved = _resolved_config(config)
-    return _get_embedder(resolved).embed_text(text)
-
-
-def store_reflection_text(
-    reflection_text: str,
-    metadata: Optional[Dict[str, Any]] = None,
-    config: Optional[Dict[str, Any]] = None,
-) -> str:
-    resolved = _resolved_config(config)
-    payload = dict(metadata or {})
-    payload.setdefault("created_at", datetime.now(timezone.utc).isoformat())
-    payload.setdefault("date", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
-    vector = embed_text(reflection_text, resolved)
-    return store_reflection(
-        reflection_text=reflection_text,
-        embedding=vector,
-        metadata=payload,
-        collection_name=_collection_name(resolved),
-        fallback_to_jsonl=True,
-    )
-
-
-def retrieve_by_query(
-    query_text: str,
-    limit: Optional[int] = None,
-    score_threshold: Optional[float] = None,
-    filter_conditions: Optional[Dict[str, Any]] = None,
-    config: Optional[Dict[str, Any]] = None,
-) -> List[Dict[str, Any]]:
-    resolved = _resolved_config(config)
-    top_k = int(limit or resolved.get("reflection_top_k", 5))
-    vector = embed_text(query_text, resolved)
-    try:
-        return retrieve_reflections(
-            query_embedding=vector,
-            limit=top_k,
-            score_threshold=score_threshold,
-            filter_conditions=filter_conditions,
-            collection_name=_collection_name(resolved),
-        )
-    except Exception:
-        return []
-
-
-def add_situations(situations_and_advice: List[Tuple[str, str]], config: Optional[Dict[str, Any]] = None):
-    for situation, recommendation in situations_and_advice:
-        text = recommendation if recommendation else situation
-        metadata = {
-            "situation": situation,
-            "recommendation": recommendation,
-            "source": "critic",
-        }
-        store_reflection_text(text, metadata=metadata, config=config)
-
-
-def get_memories(
-    current_situation: str,
-    n_matches: int = 1,
-    config: Optional[Dict[str, Any]] = None,
-) -> List[Dict[str, Any]]:
-    hits = retrieve_by_query(current_situation, limit=n_matches, config=config)
-    memories: List[Dict[str, Any]] = []
-    for hit in hits:
-        metadata = hit.get("metadata") or {}
-        memories.append(
-            {
-                "matched_situation": metadata.get("situation", ""),
-                "recommendation": hit.get("reflection_text", ""),
-                "similarity_score": hit.get("score", 0.0),
-            }
-        )
-    return memories
-
-
-def clear():
-    return None
+    return _get_embedder(resolved).embed_query(text)
 
 
 @tool

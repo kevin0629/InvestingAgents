@@ -4,7 +4,6 @@ from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from tradingagents.agents.utils.agent_utils import store_reflection
 from tradingagents.agents.utils.execution_logger import AgentExecutionLogger
 from tradingagents.agents.utils.langfuse_tracing import create_langfuse_callback
 from tradingagents.dataflows.config import set_config
@@ -161,27 +160,6 @@ class TradingAgentsGraph:
             encoding="utf-8",
         ) as file:
             json.dump(self.log_states_dict, file, indent=2, ensure_ascii=False)
-
-    def reflect_and_remember(self, returns_losses):
-        """Append lightweight post-trade reflection into memory for future critic retrieval."""
-        if not self.curr_state:
-            return
-        summary = {
-            "returns_losses": returns_losses,
-            "final_trade_decision": self.curr_state.get("final_trade_decision"),
-            "market_regime": self.curr_state.get("market_regime"),
-        }
-        situation = json.dumps(
-            {
-                "financial_reports": self.curr_state.get("financial_reports", []),
-                "technical_reports": self.curr_state.get("technical_reports", []),
-                "news_reports": self.curr_state.get("news_reports", []),
-            },
-            ensure_ascii=False,
-        )
-        add_situations(
-            [(situation, json.dumps(summary, ensure_ascii=False))]
-        )
 
     def process_signal(self, full_signal: str) -> str:
         """Extract BUY/SELL/HOLD from portfolio JSON output."""
