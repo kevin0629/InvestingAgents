@@ -23,6 +23,10 @@ from tradingagents.agents.utils.backtest_tools import (
     get_strategy,
     get_backtest_report
 )
+from tradingagents.agents.utils.reflection_data_tools import (
+    store_reflection,
+    retrieve_reflections
+)
 
 __all__ = [
     "create_msg_delete",
@@ -39,6 +43,8 @@ __all__ = [
     "search_news",
     "get_strategy",
     "get_backtest_report",
+    "store_reflection",
+    "retrieve_reflections",
 ]
 
 def create_msg_delete():

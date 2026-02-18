@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from tradingagents.agents.utils.execution_logger import AgentExecutionLogger
 
-from tradingagents.agents.utils.agent_utils import search_news
+from tradingagents.agents.utils.agent_utils import search_news, get_company_info
 
 
 def _safe_json(content: str) -> Dict[str, Any]:
@@ -76,7 +76,7 @@ def create_news_analyst(llm):
         AgentExecutionLogger.log_event(run_id, "node_start", "News Analyst", {"coordinator_plan": state.get("coordinator_plan", {})})
         plan = state.get("coordinator_plan", {})
         tasks = [t for t in plan.get("tasks", []) if t.get("agent") == "News_Analyst"]
-        tools = [search_news]
+        tools = [get_company_info, search_news]
 
         system_prompt = """
 你是 News Analyst。你必須主動使用 search_news 工具。

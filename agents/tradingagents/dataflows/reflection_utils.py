@@ -66,8 +66,6 @@ def store_reflection(
     reflection_text: str,
     embedding: List[float],
     metadata: Optional[Dict[str, Any]] = None,
-    collection_name: str = "reflections",
-    fallback_to_jsonl: bool = True
 ) -> str:
     """
     儲存 Reflection 到 Qdrant
@@ -75,9 +73,7 @@ def store_reflection(
     Args:
         reflection_text: Reflection 文本內容
         embedding: Reflection 的向量表示 (embedding)
-        metadata: 額外的 metadata，例如 {"agent": "critic", "timestamp": "...", "task_id": "..."}
-        collection_name: Collection 名稱，預設為 "reflections"
-        fallback_to_jsonl: 如果 Qdrant 不可用，是否寫入 JSONL 備援檔案
+        metadata: 額外的 metadata，例如 {"strategy": "revenue_growth_roe", "date": "..."}
         
     Returns:
         儲存的 reflection ID (UUID string)
@@ -85,14 +81,17 @@ def store_reflection(
     Raises:
         Exception: If both Qdrant and JSONL fallback fail
     """
+    collection_name = "reflections"
+    fallback_to_jsonl = True
+
     reflection_id = str(uuid.uuid4())
     
     if metadata is None:
         metadata = {}
     
-    # Add timestamp if not present
-    if "timestamp" not in metadata:
-        metadata["timestamp"] = datetime.now().isoformat()
+    # Add date if not present
+    if "date" not in metadata:
+        metadata["date"] = datetime.now().date()
     
     # Add reflection text to metadata
     metadata["reflection_text"] = reflection_text
@@ -116,7 +115,7 @@ def store_reflection(
             points=[point]
         )
         
-        return reflection_id
+        return "Stored in Qdrant with ID: " + reflection_id
         
     except Exception as e:
         # If Qdrant fails and fallback is enabled, write to JSONL
@@ -124,7 +123,7 @@ def store_reflection(
             try:
                 _write_to_jsonl_fallback(reflection_id, reflection_text, metadata)
                 print(f"Warning: Qdrant unavailable, saved to JSONL fallback. Error: {e}")
-                return reflection_id
+                return "Stored in JSONL fallback with ID: " + reflection_id
             except Exception as fallback_error:
                 raise Exception(f"Both Qdrant and JSONL fallback failed. Qdrant error: {e}, JSONL error: {fallback_error}")
         else:
@@ -133,20 +132,14 @@ def store_reflection(
 
 def retrieve_reflections(
     query_embedding: List[float],
-    limit: int = 5,
-    score_threshold: Optional[float] = None,
     filter_conditions: Optional[Dict[str, Any]] = None,
-    collection_name: str = "reflections"
 ) -> List[Dict[str, Any]]:
     """
     從 Qdrant 檢索相關的 Reflections
     
     Args:
         query_embedding: 查詢的向量表示
-        limit: 返回的最大結果數，預設 5
-        score_threshold: 相似度閾值，只返回分數高於此值的結果
-        filter_conditions: 過濾條件，例如 {"agent": "critic"}
-        collection_name: Collection 名稱，預設為 "reflections"
+        filter_conditions: 過濾條件，例如 {"strategy": "revenue_growth_roe"}，只返回符合條件的 reflections
         
     Returns:
         包含相關 reflections 的列表，每個元素為：
@@ -160,6 +153,10 @@ def retrieve_reflections(
     Raises:
         Exception: If Qdrant query fails
     """
+    limit = 5
+    score_threshold = 0.7
+    collection_name = "reflections"
+
     try:
         client = get_qdrant_client()
         

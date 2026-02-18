@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from tradingagents.agents.utils.memory import FinancialSituationMemory
+from tradingagents.agents.utils.agent_utils import store_reflection
 from tradingagents.agents.utils.execution_logger import AgentExecutionLogger
 from tradingagents.agents.utils.langfuse_tracing import create_langfuse_callback
 from tradingagents.dataflows.config import set_config
@@ -15,8 +15,9 @@ from tradingagents.llm_clients import create_llm_client
 
 
 class TradingAgentsGraph:
-    """README-aligned trading workflow:
-    Coordinator -> Financial -> Technical -> News -> Critic -> Portfolio Manager.
+    """
+    trading workflow:
+    Coordinator -> Financial, Technical, News -> Critic -> Portfolio Manager.
     """
 
     def __init__(
@@ -59,12 +60,9 @@ class TradingAgentsGraph:
         self.deep_thinking_llm = deep_client.get_llm()
         self.quick_thinking_llm = quick_client.get_llm()
 
-        self.reflection_memory = FinancialSituationMemory("critic_reflection_memory", self.config)
-
         self.graph_setup = GraphSetup(
             quick_thinking_llm=self.quick_thinking_llm,
             deep_thinking_llm=self.deep_thinking_llm,
-            reflection_memory=self.reflection_memory,
         )
         self.propagator = Propagator(max_recur_limit=self.config.get("max_recur_limit", 100))
 
@@ -181,7 +179,7 @@ class TradingAgentsGraph:
             },
             ensure_ascii=False,
         )
-        self.reflection_memory.add_situations(
+        add_situations(
             [(situation, json.dumps(summary, ensure_ascii=False))]
         )
 

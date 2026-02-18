@@ -1,6 +1,8 @@
 import json
-from typing import Any, Dict
+from typing import Any, Dict, List
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from tradingagents.agents.utils.execution_logger import AgentExecutionLogger
+from tradingagents.agents.utils.agent_utils import retrieve_reflections, store_reflection
 
 
 def _safe_json(content: str) -> Dict[str, Any]:
@@ -12,10 +14,61 @@ def _safe_json(content: str) -> Dict[str, Any]:
     return json.loads(text)
 
 
-def create_critic(llm, memory=None):
+def _run_with_tools(
+    llm,
+    system_prompt: str,
+    user_prompt: str,
+    tools: List,
+    run_id: str,
+    node_name: str,
+    max_steps: int = 6,
+) -> str:
+    messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
+    bound = llm.bind_tools(tools)
+    tool_map = {tool.name: tool for tool in tools}
+
+    for _ in range(max_steps):
+        ai_msg = bound.invoke(messages)
+        AgentExecutionLogger.log_event(
+            run_id,
+            "llm_output",
+            node_name,
+            {
+                "content": ai_msg.content,
+                "reasoning_trace": getattr(ai_msg, "reasoning_content", None)
+                or getattr(ai_msg, "additional_kwargs", {}).get("reasoning"),
+            },
+        )
+        messages.append(ai_msg)
+        if not getattr(ai_msg, "tool_calls", None):
+            return ai_msg.content
+
+        for tool_call in ai_msg.tool_calls:
+            tool_name = tool_call["name"]
+            tool_args = tool_call.get("args", {})
+            tool_fn = tool_map[tool_name]
+            try:
+                tool_result = tool_fn.invoke(tool_args)
+            except Exception as exc:
+                tool_result = f"ToolError({tool_name}): {exc}"
+
+            AgentExecutionLogger.log_event(
+                run_id,
+                "tool_call",
+                node_name,
+                {"tool": tool_name, "args": tool_args, "result": str(tool_result)[:6000]},
+            )
+            messages.append(ToolMessage(content=str(tool_result)[:12000], tool_call_id=tool_call["id"]))
+
+    final = llm.invoke(messages)
+    return final.content
+
+
+def create_critic(llm):
     def critic_node(state):
         run_id = state.get("run_id", "")
         AgentExecutionLogger.log_event(run_id, "node_start", "Critic", {"coordinator_plan": state.get("coordinator_plan", {})})
+        tools = [retrieve_reflections, store_reflection]
         plan = state.get("coordinator_plan", {})
         verification_tasks = [
             task for task in plan.get("tasks", []) if task.get("task_type") == "VERIFICATION"
@@ -43,6 +96,11 @@ def create_critic(llm, memory=None):
   "bias_detected": "",
   "lesson_learned": ""
 }
+你有兩個可用工具：
+1) retrieve_reflections：先檢索歷史反思
+2) store_reflection：產出結論後再儲存你的新反思
+
+每個任務都必須先呼叫 retrieve_reflections，再呼叫 store_reflection，最後只輸出上述 JSON。
 必須基於 verification reports 的具體內容，不可泛化。
 """.strip()
 
@@ -60,24 +118,15 @@ def create_critic(llm, memory=None):
                 },
             }
             try:
-                response = llm.invoke(
-                    [
-                        ("system", system_prompt),
-                        ("human", json.dumps(payload, ensure_ascii=False)),
-                    ]
-                )
-                AgentExecutionLogger.log_event(
+                content = _run_with_tools(
+                    llm,
+                    system_prompt,
+                    json.dumps(payload, ensure_ascii=False),
+                    tools,
                     run_id,
-                    "llm_output",
                     "Critic",
-                    {
-                        "ticker": ticker,
-                        "content": response.content,
-                        "reasoning_trace": getattr(response, "reasoning_content", None)
-                        or getattr(response, "additional_kwargs", {}).get("reasoning"),
-                    },
                 )
-                parsed = _safe_json(response.content)
+                parsed = _safe_json(content)
             except Exception as exc:
                 parsed = {
                     "ticker": ticker,
@@ -90,9 +139,6 @@ def create_critic(llm, memory=None):
 
             reflections.append(parsed)
             AgentExecutionLogger.log_event(run_id, "node_output", "Critic", {"ticker": ticker, "reflection": parsed})
-            if memory is not None:
-                situation = json.dumps(payload, ensure_ascii=False)
-                memory.add_situations([(situation, json.dumps(parsed, ensure_ascii=False))])
 
         return {"critic_reflections": reflections}
 

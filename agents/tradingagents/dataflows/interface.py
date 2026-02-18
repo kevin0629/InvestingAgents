@@ -14,6 +14,7 @@ from .fundamentals_utils import (
     get_stock_river_chart
 )
 from .backtest_utils import get_strategy, get_backtest_report
+from .reflection_utils import store_reflection, retrieve_reflections
 
 # Configuration and routing logic
 from .config import get_config
@@ -43,6 +44,7 @@ TOOLS_CATEGORIES = {
     "news_data": {
         "description": "News data",
         "tools": [
+            "get_company_info",
             "search_news"
         ]
     },
@@ -51,6 +53,13 @@ TOOLS_CATEGORIES = {
         "tools": [
             "get_strategy",
             "get_backtest_report"
+        ]
+    },
+    "reflection_data": {
+        "description": "Reflection data storage and retrieval",
+        "tools": [
+            "store_reflection",
+            "retrieve_reflection"
         ]
     }
 }
@@ -103,7 +112,14 @@ VENDOR_METHODS = {
     },
     "get_backtest_report": {
         "myself": get_backtest_report,
-    }
+    },
+    # reflection_data
+    "store_reflection": {
+        "myself": store_reflection,
+    },
+    "retrieve_reflection": {
+        "myself": retrieve_reflections,
+    },
 }
 
 def get_category_for_method(method: str) -> str:

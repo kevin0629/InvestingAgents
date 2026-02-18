@@ -84,10 +84,7 @@ def create_fundamentals_analyst(llm):
         run_id = state.get("run_id", "")
         AgentExecutionLogger.log_event(run_id, "node_start", "Fundamental Analyst", {"coordinator_plan": state.get("coordinator_plan", {})})
         plan = state.get("coordinator_plan", {})
-        tasks = [
-            t for t in plan.get("tasks", [])
-            if t.get("agent") in {"Financial_Analyst", "Fundamental_Analyst"}
-        ]
+        tasks = [t for t in plan.get("tasks", []) if t.get("agent") == "Fundamental_Analyst"]
         tools = [
             get_company_info,
             get_factors,

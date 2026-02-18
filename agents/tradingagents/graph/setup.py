@@ -9,7 +9,7 @@ from tradingagents.agents import (
     create_coordinator,
     create_critic,
     create_fundamentals_analyst,
-    create_market_analyst,
+    create_technical_analyst,
     create_news_analyst,
     create_portfolio_manager,
 )
@@ -22,20 +22,18 @@ class GraphSetup:
         self,
         quick_thinking_llm: ChatOpenAI,
         deep_thinking_llm: ChatOpenAI,
-        reflection_memory,
     ):
         """Initialize with required components."""
         self.quick_thinking_llm = quick_thinking_llm
         self.deep_thinking_llm = deep_thinking_llm
-        self.reflection_memory = reflection_memory
 
     def setup_graph(self, selected_analysts=None):
         """Set up and compile the README-aligned workflow graph."""
         coordinator_node = create_coordinator(self.deep_thinking_llm)
         fundamental_node = create_fundamentals_analyst(self.quick_thinking_llm)
-        technical_node = create_market_analyst(self.quick_thinking_llm)
+        technical_node = create_technical_analyst(self.quick_thinking_llm)
         news_node = create_news_analyst(self.quick_thinking_llm)
-        critic_node = create_critic(self.deep_thinking_llm, self.reflection_memory)
+        critic_node = create_critic(self.deep_thinking_llm)
         portfolio_manager_node = create_portfolio_manager(self.deep_thinking_llm)
 
         workflow = StateGraph(AgentState)

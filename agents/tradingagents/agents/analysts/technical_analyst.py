@@ -70,8 +70,8 @@ def _run_with_tools(
     return final.content
 
 
-def create_market_analyst(llm):
-    def market_analyst_node(state):
+def create_technical_analyst(llm):
+    def technical_analyst_node(state):
         run_id = state.get("run_id", "")
         AgentExecutionLogger.log_event(run_id, "node_start", "Technical Analyst", {"coordinator_plan": state.get("coordinator_plan", {})})
         plan = state.get("coordinator_plan", {})
@@ -135,7 +135,7 @@ def create_market_analyst(llm):
         )
         return {
             "technical_reports": reports,
-            "market_report": json.dumps(reports, ensure_ascii=False),
+            "technical_report": json.dumps(reports, ensure_ascii=False),
         }
 
-    return market_analyst_node
+    return technical_analyst_node
