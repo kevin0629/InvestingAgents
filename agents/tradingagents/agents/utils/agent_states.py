@@ -3,12 +3,8 @@ from langgraph.graph import MessagesState
 
 
 class AgentState(MessagesState):
-    run_id: Annotated[str, "Unique run identifier for execution logging"]
     user_request: Annotated[str, "Raw user request for coordinator"]
-    company_of_interest: Annotated[str, "Primary ticker/company query"]
-    trade_date: Annotated[str, "Trade date (YYYY-MM-DD)"]
-    mode: Annotated[str, "single or batch"]
-    market_regime: Annotated[str, "Current market regime summary"]
+    
     coordinator_plan: Annotated[Dict[str, Any], "Coordinator output JSON"]
 
     financial_reports: Annotated[List[Dict[str, Any]], "Financial analyst outputs"]

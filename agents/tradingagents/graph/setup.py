@@ -3,6 +3,7 @@
 from typing import Dict
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
+from langgraph.prebuilt import ToolNode
 
 from tradingagents.agents import (
     AgentState,
@@ -22,13 +23,15 @@ class GraphSetup:
         self,
         quick_thinking_llm: ChatOpenAI,
         deep_thinking_llm: ChatOpenAI,
+        tool_nodes: Dict[str, ToolNode],
     ):
         """Initialize with required components."""
         self.quick_thinking_llm = quick_thinking_llm
         self.deep_thinking_llm = deep_thinking_llm
+        self.tool_nodes = tool_nodes
 
-    def setup_graph(self, selected_analysts=None):
-        """Set up and compile the README-aligned workflow graph."""
+    def setup_graph(self):
+        """Set up and compile the workflow graph."""
         coordinator_node = create_coordinator(self.deep_thinking_llm)
         fundamental_node = create_fundamentals_analyst(self.quick_thinking_llm)
         technical_node = create_technical_analyst(self.quick_thinking_llm)
@@ -44,6 +47,9 @@ class GraphSetup:
         workflow.add_node("News Analyst", news_node)
         workflow.add_node("Critic", critic_node)
         workflow.add_node("Portfolio Manager", portfolio_manager_node)
+
+        for agent_name, tool_node in self.tool_nodes.items():
+            workflow.add_node(f"tools_{agent_name}", tool_node)
 
         workflow.add_edge(START, "Coordinator")
 

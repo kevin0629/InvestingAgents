@@ -1,8 +1,10 @@
 import json
 import os
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Dict, List, Optional
+
+from langgraph.prebuilt import ToolNode
 
 from tradingagents.agents.utils.execution_logger import AgentExecutionLogger
 from tradingagents.agents.utils.langfuse_tracing import create_langfuse_callback
@@ -11,6 +13,25 @@ from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.graph.propagation import Propagator
 from tradingagents.graph.setup import GraphSetup
 from tradingagents.llm_clients import create_llm_client
+
+# Import the new abstract tool methods from agent_utils
+from tradingagents.agents.utils.agent_utils import (
+    get_stock_data,
+    get_taiex_data,
+    get_company_info,
+    get_balance_sheet,
+    get_cashflow,
+    get_income_statement,
+    get_monthly_revenue,
+    get_factors,
+    get_dupont_analysis,
+    get_river_chart,
+    search_news,
+    get_strategy,
+    get_backtest_report,
+    store_reflection,
+    retrieve_reflections
+)
 
 
 class TradingAgentsGraph:
@@ -58,10 +79,12 @@ class TradingAgentsGraph:
 
         self.deep_thinking_llm = deep_client.get_llm()
         self.quick_thinking_llm = quick_client.get_llm()
+        self.tool_nodes = self._create_tool_nodes()
 
         self.graph_setup = GraphSetup(
             quick_thinking_llm=self.quick_thinking_llm,
             deep_thinking_llm=self.deep_thinking_llm,
+            tool_nodes=self.tool_nodes
         )
         self.propagator = Propagator(max_recur_limit=self.config.get("max_recur_limit", 100))
 
@@ -83,21 +106,69 @@ class TradingAgentsGraph:
                 kwargs["reasoning_effort"] = reasoning_effort
         return kwargs
 
-    def propagate(self, company_name: str, trade_date: str, user_request: Optional[str] = None):
+    def _create_tool_nodes(self) -> Dict[str, ToolNode]:
+        """Create tool nodes for different data sources using abstract methods."""
+        return {
+            "Coordinator": ToolNode(
+                [   
+                    # strategy and backtest tools
+                    get_strategy,
+                    get_backtest_report,
+
+                    # market data tools
+                    get_taiex_data,
+                    search_news,
+                ]
+            ),
+            "Technical Analyst": ToolNode(
+                [
+                    # Core stock data tools
+                    get_stock_data
+                ]
+            ),
+            "News Analyst": ToolNode(
+                [
+                    # News and company information
+                    get_company_info,
+                    search_news,
+                ]
+            ),
+            "Fundamental Analyst": ToolNode(
+                [
+                    # Fundamental analysis tools
+                    get_company_info,
+                    get_balance_sheet,
+                    get_cashflow,
+                    get_income_statement,
+                    get_monthly_revenue,
+                    get_factors,
+                    get_dupont_analysis,
+                    get_river_chart
+                ]
+            ),
+            "Critic": ToolNode(
+                [
+                    # Reflection tools for critic
+                    store_reflection,
+                ]
+             ),
+             "Portfolio Manager": ToolNode(
+                [
+                    # Reflection retrieval for portfolio manager
+                    retrieve_reflections,
+                ]
+             ),
+        }
+
+    def propagate(self, user_request: str):
         """Run the workflow and return final state + normalized decision."""
-        self.ticker = company_name
-        run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-        init_agent_state = self.propagator.create_initial_state(
-            company_name=company_name,
-            trade_date=trade_date,
-            user_request=user_request or company_name,
-            run_id=run_id,
-        )
+        run_id = datetime.now().isoformat()
+        init_agent_state = self.propagator.create_initial_state(user_request=user_request)
         AgentExecutionLogger.log_event(
             run_id,
             "graph_start",
             "TradingAgentsGraph",
-            {"company": company_name, "trade_date": trade_date, "user_request": user_request or company_name},
+            {"user_request": user_request},
         )
         args = self.propagator.get_graph_args(callbacks=self.callbacks if self.callbacks else None)
 
