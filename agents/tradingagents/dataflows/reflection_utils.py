@@ -73,7 +73,7 @@ def store_reflection(
     Args:
         reflection_text: Reflection 文本內容
         embedding: Reflection 的向量表示 (embedding)
-        metadata: 額外的 metadata，例如 {"strategy": "revenue_growth_roe", "date": "..."}
+        metadata: 額外的 metadata，例如 {"strategy": "monthly_revenue_growth_roe", "date": "..."}
         
     Returns:
         儲存的 reflection ID (UUID string)
@@ -139,7 +139,7 @@ def retrieve_reflections(
     
     Args:
         query_embedding: 查詢的向量表示
-        filter_conditions: 過濾條件，例如 {"strategy": "revenue_growth_roe"}，只返回符合條件的 reflections
+        filter_conditions: 過濾條件，例如 {"strategy": "monthly_revenue_growth_roe"}，只返回符合條件的 reflections
         
     Returns:
         包含相關 reflections 的列表，每個元素為：

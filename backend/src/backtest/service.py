@@ -18,8 +18,8 @@ class BacktestService:
     
     # 定義可用的策略
     AVAILABLE_STRATEGIES = {
-        "revenue_growth_roe": {
-            "name": "revenue_growth_roe",
+        "monthly_revenue_growth_roe": {
+            "name": "monthly_revenue_growth_roe",
             "description": "穩健營收動能策略: 篩選營收成長>24%、負債比<70%、自由現金流>0、流動比率>100%、EPS>0、ROE>0%的股票，並選取ROE最高的30檔",
             "parameters": {
                 "mryoy_threshold": 24,
@@ -90,8 +90,8 @@ class BacktestService:
             end_date = datetime.now().strftime("%Y-%m-%d")
         
         # 根據策略名稱執行相應的策略
-        if strategy_name == "revenue_growth_roe":
-            strategy_signal = self._execute_revenue_growth_roe_strategy(strategy_params, end_date=end_date)
+        if strategy_name == "monthly_revenue_growth_roe":
+            strategy_signal = self._execute_monthly_revenue_growth_roe_strategy(strategy_params, end_date=end_date)
         else:
             raise ValueError(f"策略 '{strategy_name}' 尚未實現")
         
@@ -109,7 +109,7 @@ class BacktestService:
             message=f"回測完成: 截止日 {end_date}"
         )
     
-    def _execute_revenue_growth_roe_strategy(self, parameters: Dict[str, Any], end_date: Optional[str] = None) -> pd.DataFrame:
+    def _execute_monthly_revenue_growth_roe_strategy(self, parameters: Dict[str, Any], end_date: Optional[str] = None) -> pd.DataFrame:
         """
         執行穩健營收動能策略
         

@@ -9,7 +9,7 @@ import talib
 from datetime import datetime
 from src.format_data import get_each_company_daily_price, get_taiex_daily
 from src.stock.schemas import StockChartQueryParams
-from typing import Optional
+from typing import Optional, List
 
 class StockService:
     def __init__(self, data, company_symbol: str, end_date: Optional[str] = None):
@@ -597,3 +597,31 @@ class StockService:
         buf.seek(0)
         return buf
 
+    def get_next_trading_day_close_price(self) -> float:
+        """
+        Get next trading day and close price for a given company symbol and end date
+        """
+        df = get_each_company_daily_price(self.data.raw_price_data, self.company_symbol)
+        
+        if df.empty:
+            raise ValueError(f"No data found for symbol {self.company_symbol}")
+
+        # Ensure index is Datetime
+        df.index = pd.to_datetime(df.index).date
+        df = df.sort_index()
+
+        # Filter data up to end_date
+        if self.end_date:
+            display_end = pd.to_datetime(self.end_date).date()
+        elif self.end_date:
+            display_end = pd.to_datetime(self.end_date).date()
+        else:
+            display_end = datetime.now().date()
+
+        df_filtered = df[df.index > display_end]
+
+        # Get the last available close price (which is the next trading day's close price)
+        next_trading_date = df_filtered.index[0]
+        next_trading_day_close_price = df_filtered['close'].iat[0]
+
+        return {"date": next_trading_date, "close": next_trading_day_close_price}

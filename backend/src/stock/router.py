@@ -70,5 +70,26 @@ async def get_stock_chart(
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail="Internal Server Error")
+    
+@router.get("/{company_symbol}/next_trading_day_close_price")
+async def get_next_trading_day_close_price(
+    company_symbol: str,
+    end_date: Optional[str] = None,
+):
+    """
+    獲取指定股票在下一個交易日的日期、收盤價
+    """
+    try:
+        data = get_data_instance()
+        service = StockService(data, company_symbol, end_date)
+        result = service.get_next_trading_day_close_price()
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
 

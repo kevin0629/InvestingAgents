@@ -12,7 +12,7 @@ def get_backtest_report(
     獲取回測報告
 
     Args:
-        strategy_name: 策略名稱，例如 "revenue_growth_roe"
+        strategy_name: 策略名稱，例如 "monthly_revenue_growth_roe"
         end_date: 回測結束日期 (YYYY-MM-DD format), 如果為 None 則使用最新資料
 
     Returns:
@@ -85,4 +85,4 @@ def get_strategy() -> str:
 
 
 if __name__ == "__main__":
-    print(get_backtest_report("revenue_growth_roe", '2025-11-21'))
+    print(get_backtest_report("monthly_revenue_growth_roe", '2025-11-21'))

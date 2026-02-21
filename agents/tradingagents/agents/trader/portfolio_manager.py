@@ -1,173 +1,55 @@
-import json
-from typing import Any, Dict, List
-from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
-from tradingagents.agents.utils.execution_logger import AgentExecutionLogger
 from tradingagents.agents.utils.agent_utils import retrieve_reflections
 
 
-def _safe_json(content: str) -> Dict[str, Any]:
-    text = (content or "").strip()
-    start = text.find("{")
-    end = text.rfind("}")
-    if start >= 0 and end >= start:
-        text = text[start:end + 1]
-    return json.loads(text)
 
+def create_portfolio_manager(llm, memory):
+    def portfolio_manager_node(state) -> dict:
+        history = state["investment_debate_state"].get("history", "")
+        market_research_report = state["market_report"]
+        sentiment_report = state["sentiment_report"]
+        news_report = state["news_report"]
+        fundamentals_report = state["fundamentals_report"]
 
-def _run_with_tools(
-    llm,
-    system_prompt: str,
-    user_prompt: str,
-    tools: List,
-    run_id: str,
-    node_name: str,
-    max_steps: int = 5,
-) -> str:
-    messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
-    bound = llm.bind_tools(tools)
-    tool_map = {tool.name: tool for tool in tools}
+        investment_debate_state = state["investment_debate_state"]
 
-    for _ in range(max_steps):
-        ai_msg = bound.invoke(messages)
-        AgentExecutionLogger.log_event(
-            run_id,
-            "llm_output",
-            node_name,
-            {
-                "content": ai_msg.content,
-                "reasoning_trace": getattr(ai_msg, "reasoning_content", None)
-                or getattr(ai_msg, "additional_kwargs", {}).get("reasoning"),
-            },
-        )
-        messages.append(ai_msg)
-        if not getattr(ai_msg, "tool_calls", None):
-            return ai_msg.content
+        curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}"
+        past_memories = memory.get_memories(curr_situation, n_matches=2)
 
-        for tool_call in ai_msg.tool_calls:
-            tool_name = tool_call["name"]
-            tool_args = tool_call.get("args", {})
-            tool_fn = tool_map[tool_name]
-            try:
-                tool_result = tool_fn.invoke(tool_args)
-            except Exception as exc:
-                tool_result = f"ToolError({tool_name}): {exc}"
+        past_memory_str = ""
+        for i, rec in enumerate(past_memories, 1):
+            past_memory_str += rec["recommendation"] + "\n\n"
 
-            AgentExecutionLogger.log_event(
-                run_id,
-                "tool_call",
-                node_name,
-                {"tool": tool_name, "args": tool_args, "result": str(tool_result)[:6000]},
-            )
-            messages.append(ToolMessage(content=str(tool_result)[:12000], tool_call_id=tool_call["id"]))
+        prompt = f"""As the portfolio manager and debate facilitator, your role is to critically evaluate this round of debate and make a definitive decision: align with the bear analyst, the bull analyst, or choose Hold only if it is strongly justified based on the arguments presented.
 
-    final = llm.invoke(messages)
-    return final.content
+Summarize the key points from both sides concisely, focusing on the most compelling evidence or reasoning. Your recommendation—Buy, Sell, or Hold—must be clear and actionable. Avoid defaulting to Hold simply because both sides have valid points; commit to a stance grounded in the debate's strongest arguments.
 
+Additionally, develop a detailed investment plan for the trader. This should include:
 
-def create_portfolio_manager(llm):
-    def portfolio_manager_node(state):
-        run_id = state.get("run_id", "")
-        mode = str(state.get("mode", "single")).upper()
-        market_regime = state.get("market_regime", "Neutral")
-        tools = [retrieve_reflections]
-        AgentExecutionLogger.log_event(
-            run_id,
-            "node_start",
-            "Portfolio Manager",
-            {"mode": mode, "market_regime": market_regime},
-        )
+Your Recommendation: A decisive stance supported by the most convincing arguments.
+Rationale: An explanation of why these arguments lead to your conclusion.
+Strategic Actions: Concrete steps for implementing the recommendation.
+Take into account your past mistakes on similar situations. Use these insights to refine your decision-making and ensure you are learning and improving. Present your analysis conversationally, as if speaking naturally, without special formatting. 
 
-        analysis_reports = {
-            "financial": state.get("financial_reports", []),
-            "technical": state.get("technical_reports", []),
-            "news": state.get("news_reports", []),
-        }
-        reflections = state.get("critic_reflections", [])
-        current_holdings = state.get("current_holdings", [])
+Here are your past reflections on mistakes:
+\"{past_memory_str}\"
 
-        system_prompt = """
-你是 Portfolio Manager。
-你必須輸出 JSON，並根據 market_regime 動態調整權重，處理訊號衝突，使用 critic reflection 修正決策。
-你可以使用 retrieve_reflections 工具取得歷史反思，並在決策時明確反映這些經驗。
+Here is the debate:
+Debate History:
+{history}"""
+        response = llm.invoke(prompt)
 
-SINGLE 模式輸出：
-{
-  "ticker": "",
-  "final_action": "Buy|Sell|Hold",
-  "confidence_score": 0,
-  "market_regime_adjustment": "",
-  "reflection_applied": "",
-  "reasoning_summary": "",
-  "risk_alert": ""
-}
-
-BATCH 模式輸出：
-{
-  "portfolio_decisions": [
-    {
-      "ticker": "",
-      "action": "OPEN_POSITION|ADD_POSITION|REDUCE_POSITION|CLOSE_POSITION|HOLD",
-      "suggested_weight": 0.0,
-      "rationale": "",
-      "reflection_used": ""
-    }
-  ]
-}
-""".strip()
-
-        payload = {
-            "mode": mode,
-            "market_regime": market_regime,
-            "analysis_reports": analysis_reports,
-            "reflections": reflections,
-            "current_holdings": current_holdings,
-            "retrieval_query_hint": {
-                "company": state.get("company_of_interest", ""),
-                "trade_date": state.get("trade_date", ""),
-                "market_regime": market_regime,
-            },
+        new_investment_debate_state = {
+            "judge_decision": response.content,
+            "history": investment_debate_state.get("history", ""),
+            "bear_history": investment_debate_state.get("bear_history", ""),
+            "bull_history": investment_debate_state.get("bull_history", ""),
+            "current_response": response.content,
+            "count": investment_debate_state["count"],
         }
 
-        try:
-            content = _run_with_tools(
-                llm,
-                system_prompt,
-                json.dumps(payload, ensure_ascii=False),
-                tools,
-                run_id,
-                "Portfolio Manager",
-            )
-            decision = _safe_json(content)
-        except Exception as exc:
-            if mode == "BATCH":
-                decision = {
-                    "portfolio_decisions": [
-                        {
-                            "ticker": state.get("company_of_interest", "UNKNOWN"),
-                            "action": "HOLD",
-                            "suggested_weight": 0.0,
-                            "rationale": f"Fallback decision due to runtime issue: {exc}",
-                            "reflection_used": "None",
-                        }
-                    ]
-                }
-            else:
-                decision = {
-                    "ticker": state.get("company_of_interest", "UNKNOWN"),
-                    "final_action": "Hold",
-                    "confidence_score": 50,
-                    "market_regime_adjustment": "No adjustment",
-                    "reflection_applied": "None",
-                    "reasoning_summary": f"Fallback decision due to runtime issue: {exc}",
-                    "risk_alert": "資料不足，需人工覆核",
-                }
-
-        AgentExecutionLogger.log_event(run_id, "node_output", "Portfolio Manager", {"decision": decision})
         return {
-            "portfolio_decision": decision,
-            "investment_plan": json.dumps(decision, ensure_ascii=False),
-            "trader_investment_plan": json.dumps(decision, ensure_ascii=False),
-            "final_trade_decision": json.dumps(decision, ensure_ascii=False),
+            "investment_debate_state": new_investment_debate_state,
+            "investment_plan": response.content,
         }
 
     return portfolio_manager_node

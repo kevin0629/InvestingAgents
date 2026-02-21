@@ -60,6 +60,11 @@ class TradingAgentsGraph:
 
         set_config(self.config)
 
+        os.makedirs(
+            os.path.join(self.config["project_dir"], "dataflows/data_cache"),
+            exist_ok=True,
+        )
+
         llm_kwargs = self._get_provider_kwargs()
         if self.callbacks:
             llm_kwargs["callbacks"] = self.callbacks
@@ -109,7 +114,7 @@ class TradingAgentsGraph:
     def _create_tool_nodes(self) -> Dict[str, ToolNode]:
         """Create tool nodes for different data sources using abstract methods."""
         return {
-            "Coordinator": ToolNode(
+            "coordinator": ToolNode(
                 [   
                     # strategy and backtest tools
                     get_strategy,
@@ -120,20 +125,20 @@ class TradingAgentsGraph:
                     search_news,
                 ]
             ),
-            "Technical Analyst": ToolNode(
+            "technical": ToolNode(
                 [
                     # Core stock data tools
                     get_stock_data
                 ]
             ),
-            "News Analyst": ToolNode(
+            "news": ToolNode(
                 [
                     # News and company information
                     get_company_info,
                     search_news,
                 ]
             ),
-            "Fundamental Analyst": ToolNode(
+            "fundamental": ToolNode(
                 [
                     # Fundamental analysis tools
                     get_company_info,
@@ -146,13 +151,13 @@ class TradingAgentsGraph:
                     get_river_chart
                 ]
             ),
-            "Critic": ToolNode(
+            "critic": ToolNode(
                 [
                     # Reflection tools for critic
                     store_reflection,
                 ]
              ),
-             "Portfolio Manager": ToolNode(
+             "portfolio manager": ToolNode(
                 [
                     # Reflection retrieval for portfolio manager
                     retrieve_reflections,
@@ -204,14 +209,15 @@ class TradingAgentsGraph:
                 "portfolio_decision": final_state.get("portfolio_decision"),
             },
         )
-        self._log_state(trade_date, final_state)
+        self._log_state(final_state)
         return final_state, self.process_signal(final_state.get("final_trade_decision", ""))
 
-    def _log_state(self, trade_date: str, final_state: Dict[str, Any]):
-        self.log_states_dict[str(trade_date)] = {
+    def _log_state(self, final_state: Dict[str, Any]):
+        end_date = final_state.get("end_date")
+        self.log_states_dict[str(end_date)] = {
             "run_id": final_state.get("run_id"),
             "company_of_interest": final_state.get("company_of_interest"),
-            "trade_date": final_state.get("trade_date"),
+            "end_date": end_date,
             "mode": final_state.get("mode"),
             "market_regime": final_state.get("market_regime"),
             "coordinator_plan": final_state.get("coordinator_plan"),
@@ -226,7 +232,7 @@ class TradingAgentsGraph:
         directory = Path(f"eval_results/{self.ticker}/TradingAgentsStrategy_logs/")
         directory.mkdir(parents=True, exist_ok=True)
         with open(
-            f"eval_results/{self.ticker}/TradingAgentsStrategy_logs/full_states_log_{trade_date}.json",
+            f"eval_results/{self.ticker}/TradingAgentsStrategy_logs/full_states_log_{end_date}.json",
             "w",
             encoding="utf-8",
         ) as file:

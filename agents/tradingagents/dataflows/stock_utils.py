@@ -62,24 +62,52 @@ def get_stock_chart(
     
     return response.content
 
+def get_next_trading_day_close_price(
+    company_symbol: str,
+    end_date: Optional[str] = None
+) -> dict:
+    """
+    獲取指定股票在下一個交易日的日期、收盤價
+    
+    Args:
+        company_symbol: 股票代碼，例如 "2330"
+        end_date: 結束日期 (YYYY-MM-DD format), 如果為 None 則使用最新資料
+
+    Returns:
+        包含下一個交易日日期與收盤價的字典，例如 {"date": "2024-07-01", "close": 600.0}
+    """
+    base_url = get_backend_base_url()
+    url = f"{base_url}/stock/{company_symbol}/next_trading_day_close_price"
+    
+    params = {}
+    if end_date:
+        params["end_date"] = end_date
+    
+    response = requests.get(url, params=params)
+    response.raise_for_status()
+    
+    return response.json()
+
 
 if __name__ == "__main__":
     # Example usage
     company_symbol = "2330"
     # Get PNG bytes from backend
     # img_bytes = get_taiex_chart()
-    img_bytes = get_stock_chart(company_symbol, end_date="2024-06-30", timeframe="W")
+    # img_bytes = get_stock_chart(company_symbol, end_date="2024-06-30", timeframe="W")
 
     # Try to open with PIL if available (more robust), otherwise fall back to
     # matplotlib.image.imread which can read from a BytesIO for PNG.
-    try:
-        from PIL import Image
-        img = Image.open(BytesIO(img_bytes))
-        plt.imshow(img)
-    except Exception:
-        import matplotlib.image as mpimg
-        img = mpimg.imread(BytesIO(img_bytes), format="png")
-        plt.imshow(img)
+    # try:
+    #     from PIL import Image
+    #     img = Image.open(BytesIO(img_bytes))
+    #     plt.imshow(img)
+    # except Exception:
+    #     import matplotlib.image as mpimg
+    #     img = mpimg.imread(BytesIO(img_bytes), format="png")
+    #     plt.imshow(img)
 
-    plt.axis('off')
-    plt.show()
+    # plt.axis('off')
+    # plt.show()
+
+    print(get_next_trading_day_close_price(company_symbol, end_date="2020-11-13"))

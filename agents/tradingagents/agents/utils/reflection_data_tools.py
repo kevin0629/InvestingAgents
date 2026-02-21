@@ -65,14 +65,14 @@ def embed_text(text: str, config: Optional[Dict[str, Any]] = None) -> List[float
 @tool
 def retrieve_reflections(
     query: Annotated[str, "Query text for retrieving reflections"],
-    strategy: Annotated[str, "Optional filter conditions, e.g. revenue_growth_roe"] = None,
+    strategy: Annotated[str, "Optional filter conditions, e.g. monthly_revenue_growth_roe"] = None,
 ) -> List[Dict[str, Any]]:
     """
     Retrieve reflection data for a given query.
 
     Args:
         query (str): Query text for retrieving reflections
-        strategy (str): Optional filter conditions, e.g. revenue_growth_roe
+        strategy (str): Optional filter conditions, e.g. monthly_revenue_growth_roe
     Returns:
         List[Dict[str, Any]]: A list of reflection data dictionaries
     """
@@ -84,14 +84,14 @@ def retrieve_reflections(
 @tool
 def store_reflection(
     reflection_text: Annotated[str, "Reflection text to store"],
-    strategy: Annotated[str, "Optional filter conditions, e.g. revenue_growth_roe"] = None,
+    strategy: Annotated[str, "Optional filter conditions, e.g. monthly_revenue_growth_roe"] = None,
 ) -> str:
     """
     Store reflection data to Qdrant.
     
     Args:
         reflection_text: Reflection text to store
-        strategy: Optional filter conditions, e.g. revenue_growth_roe
+        strategy: Optional filter conditions, e.g. monthly_revenue_growth_roe
         
     Returns:
         str: "Stored in Qdrant with ID: " + reflection_id
