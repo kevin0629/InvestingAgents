@@ -54,10 +54,13 @@ def create_news_analyst(llm):
         task = "\n".join([f"- {description}" for description in task_descriptions])
         buy_reason = "\n".join([f"- {reason}" for reason in buy_reasons])
 
+        end_date = state.get("end_date") or ""
+
         # --- DEBUG ---
         print(f"\n[News Analyst] received {len(task_payloads)} task(s)")
         print(f"  symbols   : {symbols}")
         print(f"  task_type : {task_type}")
+        print(f"  end_date  : {end_date}")
         for _i, _t in enumerate(task_payloads):
             print(f"  task[{_i}]  : {_t}")
         print(f"  news_messages so far: {len(state.get('news_messages', []))}")
@@ -66,13 +69,17 @@ def create_news_analyst(llm):
             print("[News Analyst] No valid symbols — skipping.")
             return {}
 
-        prompt = f"""你是一位新聞分析師。你的專長是從紛雜的新聞資訊中，提煉出對{symbol}股價有實質影響的催化劑。你負責分析非結構化的文字資訊（擴廠、新產能、新技術、新產品、產業趨勢、供應鏈等），並將其轉化為對未來股價的影響力評估。\n
+        prompt = f"""你是一位新聞分析師。你的專長是從紛雜的新聞資訊中，提煉出對{symbol}股價有實質影響的催化劑。你負責分析非結構化的文字資訊（擴廠、新產能、新技術、新產品、產業趨勢、供應鏈等），並將其轉化為對未來股價的影響力評估。
+
+        【資料截止日期限制 — 最高優先級】
+        本次分析的資料截止日期為 {end_date}。所有工具呼叫的 end_date 參數皆必須設為 {end_date}（或更早），絕對不得使用超過此日期的任何資料或新聞。\n
 
         你的任務為 {task}\n
         你可以使用下列工具取得額外資訊: {tool_names}\n
         【search_news 使用規則 — 嚴格遵守】
         每次呼叫 `search_news` 的 query 參數必須符合以下格式：「<股票代號或公司名稱> + 具體業務關鍵字」。
         例如：「{symbol} 擴廠計畫 2025」、「{symbol} 新客戶訂單」、「{symbol} 供應鏈缺貨」、「{symbol} 併購案」。
+        每次呼叫 `search_news` 必須帶入 end_date="{end_date}" 參數。
         禁止使用與 {symbol} 無關的泛用詞（例如「公司新聞分析」、「新聞分析師指南」等）作為 query。
         每個 query 都必須以 {symbol} 的股票代號或公司名稱起頭，確保搜索結果聚焦在目標公司。\n
         任務指引: task_type 為 {task_type}。若 `task_type` 是 VERIFICATION，代表這是庫存股，你必須先驗證 上其購買理由({buy_reason}) 有沒有符合預期，並偵測盲點，確認沒有忽略其他狀況，再分析未來並決定是否繼續持有或加碼減碼。\n

@@ -51,10 +51,13 @@ def create_technical_analyst(llm):
         task = "\n".join([f"- {description}" for description in task_descriptions])
         buy_reason = "\n".join([f"- {reason}" for reason in buy_reasons])
 
+        end_date = state.get("end_date") or ""
+
         # --- DEBUG ---
         print(f"\n[Technical Analyst] received {len(task_payloads)} task(s)")
         print(f"  symbols   : {symbols}")
         print(f"  task_type : {task_type}")
+        print(f"  end_date  : {end_date}")
         for _i, _t in enumerate(task_payloads):
             print(f"  task[{_i}]  : {_t}")
         print(f"  technical_messages so far: {len(state.get('technical_messages', []))}")
@@ -63,12 +66,15 @@ def create_technical_analyst(llm):
             print("[Technical Analyst] No valid symbols — skipping.")
             return {}
 
-        prompt = f"""你是一位技術分析師，負責分析{symbol}的價格、成交量與技術指標，並進一步判讀未來的走勢。\n
+        prompt = f"""你是一位技術分析師，負責分析{symbol}的價格、成交量與技術指標，並進一步判讀未來的走勢。
+
+        【資料截止日期限制 — 最高優先級】
+        本次分析的資料截止日期為 {end_date}。所有工具呼叫的 end_date 參數皆必須設為 {end_date}，絕對不得使用超過此日期的任何價格或技術指標資料。\n
 
         你的任務為 {task}\n
         你可以使用下列工具取得額外資訊: {tool_names}\n
         你只能查詢以下股票代號的資料：{symbol}。
-        絕對禁止查詢任何未在上方列出的股票代號（例如 2330、UNKNOWN 或其他任何代號）。若工具呼叫的 symbol 參數不在 [{symbol}] 清單內，視為違規，請立即停止並改用正確代號。\n
+        絕對禁止查詢任何未在上方列出的股票代號（例如 UNKNOWN 或其他任何代號）。若工具呼叫的 symbol 參數不在 [{symbol}] 清單內，視為違規，請立即停止並改用正確代號。\n
         任務指引: task_type 為 {task_type}。若 `task_type` 是 VERIFICATION，代表這是庫存股，你必須先驗證 上其購買理由({buy_reason}) 有沒有符合預期，並偵測盲點，確認沒有忽略其他狀況，再分析未來並決定是否繼續持有或加碼減碼。\n
 在分析{symbol}的技術面時，請務必從以下幾個層面進行全面的評估：
 1. 趨勢與價位分析: 判斷目前股價處於長期、中期、短期分別處於何種趨勢（上升、下降、或盤整），並指出圖表上關鍵的「支撐」與「壓力」區間

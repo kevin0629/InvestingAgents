@@ -70,10 +70,13 @@ def create_financial_analyst(llm):
         task = "\n".join([f"- {description}" for description in task_descriptions])
         buy_reason = "\n".join([f"- {reason}" for reason in buy_reasons])
 
+        end_date = state.get("end_date") or ""
+
         # --- DEBUG ---
         print(f"\n[Financial Analyst] received {len(task_payloads)} task(s)")
         print(f"  symbols   : {symbols}")
         print(f"  task_type : {task_type}")
+        print(f"  end_date  : {end_date}")
         for _i, _t in enumerate(task_payloads):
             print(f"  task[{_i}]  : {_t}")
         print(f"  financial_messages so far: {len(state.get('financial_messages', []))}")
@@ -82,7 +85,11 @@ def create_financial_analyst(llm):
             print("[Financial Analyst] No valid symbols — skipping.")
             return {}
 
-        prompt = f"""你是一位財務分析師，負責評估{symbol}股價是被低估還是被高估，並分析未來公司股價上升的可能性。\n
+        prompt = f"""你是一位財務分析師，負責評估{symbol}股價是被低估還是被高估，並分析未來公司股價上升的可能性。
+
+        【資料截止日期限制 — 最高優先級】
+        本次分析的資料截止日期為 {end_date}。所有工具呼叫的 end_date 參數皆必須設為 {end_date}（或更早），絕對不得查詢或引用超過此日期的任何財報、月營收或財務數據。\n
+
         你的任務為 {task}\n
         你可以使用下列工具取得額外資訊: {tool_names}\n
         你只能查詢以下股票代號的資料：{symbol}。

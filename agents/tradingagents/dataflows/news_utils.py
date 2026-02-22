@@ -1,7 +1,28 @@
 import os
 import importlib
 from functools import lru_cache
-from typing import Optional, Dict, Any, Literal
+from typing import Optional, Dict, Any, Literal, List
+
+
+# Taiwanese / Chinese financial news sites — Tavily will prefer these domains
+_PREFERRED_DOMAINS: List[str] = [
+    "moneydj.com",        # MoneyDJ 都市財經
+    "twse.com.tw",        # 證交所
+    "tpex.org.tw",        # 櫃櫃
+    "udn.com",            # 聯合新話網
+    "ctee.com.tw",        # 工商時報
+    "cna.com.tw",         # 中央社
+    "technews.tw",        # 科技新報
+    "ithome.com.tw",      # iThome
+    "digitimes.com.tw",   # Digitimes
+    "ebc.net.tw",         # 東森財經
+    "stockfeel.com.tw",   # 股感
+    "blueseek.com.tw",
+    "wealth.com.tw",      # 財訊雙週刊
+]
+
+# Minimum Tavily relevance score — results below this are noise
+MIN_SCORE_THRESHOLD = 0.3
 
 
 def get_tavily_api_key() -> str:
@@ -22,34 +43,22 @@ def get_tavily_client() -> Any:
 
 def search_news(
     query: str,
-    search_depth: Literal["basic", "advanced", "fast", "ultra-fast"] = "basic",
+    search_depth: Literal["basic", "advanced", "fast", "ultra-fast"] = "advanced",
     max_results: int = 5,
     end_date: Optional[str] = None,
+    min_score: float = MIN_SCORE_THRESHOLD,
 ) -> Dict[str, Any]:
     """
     使用 Tavily SDK 搜尋新聞
     
     Args:
-        query: 搜尋關鍵字，例如 "台積電 TSMC"
-        search_depth: 搜尋深度，"basic" 或 "advanced"
+        query: 搜尋關鍵字，例如 "輝達 2330 擴廠"
+        search_depth: 搜尋深度，預設 "advanced" 以提高相關性
         max_results: 最多返回結果數，預設 5
         end_date: 指定搜尋的結束日期 (YYYY-MM-DD format)，None 表示不限制
+        min_score: 返回結果的最低相關性分數，鄠於此分數的結果將被過濃
     Returns:
-        包含新聞搜尋結果的字典，格式：
-        {
-            "query": str,
-            "results": [
-                {
-                    "title": str,
-                    "url": str,
-                    "content": str,
-                    "score": float,
-                    "published_date": str
-                },
-                ...
-            ]
-        }
-        
+        包含新聞搜尋結果的字典
     Raises:
         RuntimeError: If Tavily request fails
         ValueError: If TAVILY_API_KEY not found
@@ -57,7 +66,7 @@ def search_news(
     client = get_tavily_client()
 
     try:
-        return client.search(
+        response = client.search(
             query=query,
             topic="news",
             search_depth=search_depth,
@@ -66,46 +75,68 @@ def search_news(
             include_answer=False,
             include_raw_content=False,
             include_images=False,
+            include_domains=_PREFERRED_DOMAINS,
         )
-    except Exception as exc:
-        raise RuntimeError(f"Tavily search failed: {exc}") from exc
+    except Exception:
+        # Fallback: retry without domain filter (some Tavily plans don't support it)
+        try:
+            response = client.search(
+                query=query,
+                topic="news",
+                search_depth=search_depth,
+                max_results=max_results,
+                end_date=end_date,
+                include_answer=False,
+                include_raw_content=False,
+                include_images=False,
+            )
+        except Exception as exc:
+            raise RuntimeError(f"Tavily search failed: {exc}") from exc
+
+    # Filter out low-relevance results
+    results = response.get("results", [])
+    filtered = [r for r in results if (r.get("score") or 0) >= min_score]
+    response["results"] = filtered
+    return response
 
 
 def search_news_for_agent(
     query: str,
     max_results: int = 5,
     end_date: Optional[str] = None,
+    min_score: float = MIN_SCORE_THRESHOLD,
 ) -> str:
     """Return Tavily news search results in an LLM-friendly markdown string."""
     response = search_news(
         query=query,
-        search_depth="basic",
+        search_depth="advanced",
         max_results=max_results,
         end_date=end_date,
+        min_score=min_score,
     )
 
     results = response.get("results", [])
-    answer = response.get("answer", "")
     if not results:
-        return f"No Tavily news results found for query: {query}"
+        return (
+            f"查詢「{query}」未找到相關性足夠高的新聞結果（最低分數門檻: {min_score}）。"
+            f"建議改用更具體的中文關鍵字並包含股票代號或公司名稱。"
+        )
 
-    lines = [f"## Tavily News Results for: {query}", ""]
-    if answer:
-        lines.append(f"### Answer: {answer}")
-        lines.append("")
+    lines = [f"## 新聞搜尋結果：{query}", ""]
 
     for index, item in enumerate(results, start=1):
-        title = item.get("title", "No title")
-        url = item.get("url", "")
-        content = item.get("content", "")
-        score = item.get("score")
- 
+        title   = item.get("title", "(無標題)")
+        content = item.get("content", "").strip()
+        score   = item.get("score", 0)
+        pub     = item.get("published_date", "")
+
         lines.append(f"### {index}. {title}")
-        lines.append(f"- URL: {url or 'N/A'}")
-        if score is not None:
-            lines.append(f"- Score: {score}")
+        if pub:
+            lines.append(f"- 發佈日期: {pub}  | 相關度: {score:.3f}")
+        else:
+            lines.append(f"- 相關度: {score:.3f}")
         if content:
-            lines.append(f"- Summary: {content}")
+            lines.append(f"{content}")
         lines.append("")
 
     return "\n".join(lines)

@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 from typing import List, Literal
 
 class Task(BaseModel):
-    symbol: str = Field(None, description="The stock symbol related to this task")
+    symbol: str = Field(None, description="The stock symbol related to this task, must be integer string like '2330', '2455', '3491'")
     task_type: Literal["ANALYSIS", "VERIFICATION"] = Field(None, description="Type of the technical task")
     task: str = Field(None, description="Detailed description of the task")
     buy_reason: str = Field(None, description="The reason for recommending a buy action, if task_type is VERIFICATION else None")
