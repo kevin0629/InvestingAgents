@@ -1,15 +1,29 @@
 from tradingagents.agents.utils.agent_output_formats import NewsOutput
 from tradingagents.agents.utils.agent_utils import search_news, get_company_info
+from langchain_core.messages import HumanMessage
 
 
 
 def create_news_analyst(llm):
     def news_analyst_node(state) -> dict:
+        def _extract_payload(result, output_tool_name):
+            tool_calls = getattr(result, "tool_calls", None) or []
+            for call in tool_calls:
+                if call.get("name") == output_tool_name:
+                    return call.get("args", {}) or {}
+            content = getattr(result, "content", None)
+            if isinstance(content, dict):
+                return content
+            return {}
+
+        def _tool_name(tool):
+            return getattr(tool, "name", getattr(tool, "__name__", tool.__class__.__name__))
+
         tools = [
             get_company_info,
             search_news,
         ]
-        tool_names = ", ".join([tool.name for tool in tools])
+        tool_names = ", ".join([_tool_name(tool) for tool in tools])
 
         def _get_value(payload, key, default=""):
           if payload is None:
@@ -66,20 +80,22 @@ def create_news_analyst(llm):
 - strong_sell: 溢價收購或無助核心競爭力的行為，不利股東，建議避開
 """
 
-        try:
-            llm_for_chain = llm.bind_tools(tools).with_structured_output(NewsOutput)
-        except Exception:
-            llm_for_chain = llm.with_structured_output(NewsOutput)
+        llm_with_tools = llm.bind_tools(tools)
 
-        result = llm_for_chain.invoke(prompt)
+        messages = list(state.get("messages", []))
+        messages.append(HumanMessage(content=prompt))
+        result = llm_with_tools.invoke(messages)
 
-        analysis_reports = getattr(result, "news_analysis_reports", None)
-        verification_reports = getattr(result, "news_verification_reports", None)
+        report = _extract_payload(result, NewsOutput.__name__)
+        analysis_reports = report.get("news_analysis_reports", [])
+        verification_reports = report.get("news_verification_reports", [])
 
-        if analysis_reports is not None:
-            return {"news_analysis_reports": analysis_reports}
-        else:
-            return {"news_verification_reports": verification_reports}
+        output = {"messages": [result]}
+        if analysis_reports:
+          output["news_analysis_reports"] = analysis_reports
+        if verification_reports:
+          output["news_verification_reports"] = verification_reports
+        return output
 
     return news_analyst_node
 

@@ -1,24 +1,53 @@
 from tradingagents.agents.utils.agent_utils import retrieve_reflections
 from tradingagents.agents.utils.agent_output_formats import PortfolioDecisions
+from langchain_core.messages import HumanMessage
 
 
 
 def create_portfolio_manager(llm):
     def portfolio_manager_node(state) -> dict:
-        tools = [retrieve_reflections]
-        tool_names = ", ".join([tool.name for tool in tools])
+        def _extract_payload(result, output_tool_name):
+            tool_calls = getattr(result, "tool_calls", None) or []
+            for call in tool_calls:
+                if call.get("name") == output_tool_name:
+                    return call.get("args", {}) or {}
+            content = getattr(result, "content", None)
+            if isinstance(content, dict):
+                return content
+            return {}
 
-        user_query = state["user_query"]
-        mode = state["mode"]
-        market_situation = state["market_situation"]
-        strategy = state["strategy"]
+        def _tool_name(tool):
+            return getattr(tool, "name", getattr(tool, "__name__", tool.__class__.__name__))
+        
+        tools = [retrieve_reflections, PortfolioDecisions]
+        tool_names = ", ".join([_tool_name(tool) for tool in tools])
 
-        financial_analysis_reports = state["financial_analysis_reports"]
-        technical_analysis_reports = state["technical_analysis_reports"]
-        news_analysis_reports = state["news_analysis_reports"]
-        financial_verification_reports = state["financial_verification_reports"]
-        technical_verification_reports = state["technical_verification_reports"]
-        news_verification_reports = state["news_verification_reports"]
+        def _get_value(payload, key, default=""):
+            if payload is None:
+                return default
+            if isinstance(payload, dict):
+                return payload.get(key, default)
+            return getattr(payload, key, default)
+
+        task_payload = state.get("technical_task")
+        if task_payload is None:
+            technical_tasks = state.get("technical_tasks") or []
+            if isinstance(technical_tasks, list) and technical_tasks:
+                task_payload = technical_tasks[0]
+            elif isinstance(technical_tasks, dict):
+                task_payload = technical_tasks.get("task")
+
+        user_query = _get_value(state, "user_query", "")
+        mode = _get_value(state, "mode", "")
+        market_situation = _get_value(state, "market_situation", "")
+        strategy = _get_value(state, "strategy", "")
+
+        financial_analysis_reports = _get_value(state, "financial_analysis_reports", [])
+        technical_analysis_reports = _get_value(state, "technical_analysis_reports", [])
+        news_analysis_reports = _get_value(state, "news_analysis_reports", [])
+        financial_verification_reports = _get_value(state, "financial_verification_reports", [])
+        technical_verification_reports = _get_value(state, "technical_verification_reports", [])
+        news_verification_reports = _get_value(state, "news_verification_reports", [])
 
 
         prompt = f"""你是擁有最終裁量權的投資長。你的工作是做出投資決策。你需要綜合考量分析師的報告、市場情況、歷史教訓，你的目標是建構一個「高勝率」且「風險可控」的投資組合。你必須具備批判性思維，當子 Agent 意見分歧時，由你進行最終裁決。\n
@@ -39,15 +68,18 @@ def create_portfolio_manager(llm):
 3. 部位管理: 根據最終信心分數 (0-10) 決定動作，Score > 8: Aggressive Buy (建倉/加碼 10-15% 權重)，Score 7: Buy (建倉 5-8% 權重)，Score 5~6: Hold (觀望/續抱)。Score < 5: Sell (減碼/清倉)
 """
 
-        try:
-            llm_for_chain = llm.bind_tools(tools).with_structured_output(PortfolioDecisions)
-        except Exception:
-            llm_for_chain = llm.with_structured_output(PortfolioDecisions)
+        llm_with_tools = llm.bind_tools(tools)
 
-        result = llm_for_chain.invoke(prompt)
+        messages = list(state.get("messages", []))
+        messages.append(HumanMessage(content=prompt))
+        result = llm_with_tools.invoke(messages)
 
-        portfolio_decisions = getattr(result, "portfolio_decisions", None)
+        report = _extract_payload(result, PortfolioDecisions.__name__)
+        portfolio_decisions = report.get("portfolio_decisions", [])
 
-        return {"portfolio_decisions": portfolio_decisions}
+        output = {"messages": [result]}
+        if portfolio_decisions:
+            output["portfolio_decisions"] = portfolio_decisions
+        return output
 
     return portfolio_manager_node

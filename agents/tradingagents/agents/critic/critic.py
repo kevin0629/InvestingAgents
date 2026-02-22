@@ -1,13 +1,17 @@
 from tradingagents.agents.utils.agent_output_formats import FinancialOutput
 
 from tradingagents.agents.utils.agent_utils import store_reflection
+from langchain_core.messages import HumanMessage
 
 
 
 def create_critic(llm):
     def critic_node(state) -> dict:
+        def _tool_name(tool):
+            return getattr(tool, "name", getattr(tool, "__name__", tool.__class__.__name__))
+
         tools = [store_reflection]
-        tool_names = ", ".join([tool.name for tool in tools])
+        tool_names = ", ".join([_tool_name(tool) for tool in tools])
 
         financial_verification = state["financial_verification_reports"]
         news_verification = state["news_verification_reports"]
@@ -38,7 +42,9 @@ News Analyst 的驗證報告: {news_verification}\n
 
         llm_with_tools = llm.bind_tools(tools)
 
-        result = llm_with_tools.invoke(prompt)
+        messages = list(state.get("messages", []))
+        messages.append(HumanMessage(content=prompt))
+        result = llm_with_tools.invoke(messages)
 
         reflection = ""
 
@@ -46,6 +52,9 @@ News Analyst 的驗證報告: {news_verification}\n
         if len(tool_calls) == 0:
             reflection = getattr(result, "content", "") or ""
 
-        return {"critic_reflection": reflection}
+        output = {"messages": [result]}
+        if reflection:
+            output["critic_reflections"] = [reflection]
+        return output
 
     return critic_node

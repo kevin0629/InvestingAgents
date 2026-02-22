@@ -1,12 +1,26 @@
 from tradingagents.agents.utils.agent_output_formats import TechnicalOutput
 from tradingagents.agents.utils.agent_utils import get_stock_data
+from langchain_core.messages import HumanMessage
 
 
 
 def create_technical_analyst(llm):
     def technical_analyst_node(state) -> dict:
+        def _extract_payload(result, output_tool_name):
+            tool_calls = getattr(result, "tool_calls", None) or []
+            for call in tool_calls:
+                if call.get("name") == output_tool_name:
+                    return call.get("args", {}) or {}
+            content = getattr(result, "content", None)
+            if isinstance(content, dict):
+                return content
+            return {}
+
+        def _tool_name(tool):
+            return getattr(tool, "name", getattr(tool, "__name__", tool.__class__.__name__))
+
         tools = [get_stock_data]
-        tool_names = ", ".join([tool.name for tool in tools])
+        tool_names = ", ".join([_tool_name(tool) for tool in tools])
 
         def _get_value(payload, key, default=""):
             if payload is None:
@@ -49,20 +63,22 @@ def create_technical_analyst(llm):
 - strong_sell: 長、中、短期趨勢皆為空頭，且 RSI 無底部背離，成交量配合價跌
 """
 
-        try:
-            llm_for_chain = llm.bind_tools(tools).with_structured_output(TechnicalOutput)
-        except Exception:
-            llm_for_chain = llm.with_structured_output(TechnicalOutput)
+        llm_with_tools = llm.bind_tools(tools)
 
-        result = llm_for_chain.invoke(prompt)
+        messages = list(state.get("messages", []))
+        messages.append(HumanMessage(content=prompt))
+        result = llm_with_tools.invoke(messages)
 
-        analysis_reports = getattr(result, "technical_analysis_reports", None)
-        verification_reports = getattr(result, "technical_verification_reports", None)
+        report = _extract_payload(result, TechnicalOutput.__name__)
+        analysis_reports = report.get("technical_analysis_reports", [])
+        verification_reports = report.get("technical_verification_reports", [])
 
-        if analysis_reports is not None:
-            return {"technical_analysis_reports": analysis_reports}
-        else:
-            return {"technical_verification_reports": verification_reports}
+        output = {"messages": [result]}
+        if analysis_reports:
+            output["technical_analysis_reports"] = analysis_reports
+        if verification_reports:
+            output["technical_verification_reports"] = verification_reports
+        return output
 
     return technical_analyst_node
 

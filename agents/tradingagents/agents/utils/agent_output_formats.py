@@ -2,12 +2,13 @@ from pydantic import BaseModel, Field
 from typing import List, Literal
 
 class Task(BaseModel):
-    symbol: str = Field(None, description="The stock symbol related to this task (e.g., 2330 for TSMC)")
+    symbol: str = Field(None, description="The stock symbol related to this task")
     task_type: Literal["ANALYSIS", "VERIFICATION"] = Field(None, description="Type of the technical task")
     task: str = Field(None, description="Detailed description of the task")
     buy_reason: str = Field(None, description="The reason for recommending a buy action, if task_type is VERIFICATION else None")
 
 class CoordinatorOutput(BaseModel):
+    """Respond to the user with this"""
     user_query: str = Field(None, description="The original user query that initiated the analysis and trading process")
     mode: Literal["query", "strategy"] = Field(None, description="Operation mode: query or strategy")
     market_situation: str = Field(None, description="Summary of the current market situation.")
@@ -36,6 +37,7 @@ class FinancialVerificationReport(BaseModel):
     report: str = Field(None, description="The result of the verification process for the given financial task")
 
 class FinancialOutput(BaseModel):
+    """Respond to the user with financial_analysis_reports when the task_type is ANALYSIS, or financial_verification_reports when the task_type is VERIFICATION"""
     financial_analysis_reports: List[FinancialAnalysisReport] = Field(None, description="Financial analyst outputs for analysis")
     financial_verification_reports: List[FinancialVerificationReport] = Field(None, description="Financial analyst reflections for verification")
 
@@ -56,6 +58,7 @@ class NewsVerificationReport(BaseModel):
     report: str = Field(None, description="The result of the verification process for the given news task")
 
 class NewsOutput(BaseModel):
+    """Respond to the user with news_analysis_reports when the task_type is ANALYSIS, or news_verification_reports when the task_type is VERIFICATION"""
     news_analysis_reports: List[NewsAnalysisReport] = Field(None, description="News analyst outputs for analysis")
     news_verification_reports: List[NewsVerificationReport] = Field(None, description="News analyst reflections for verification")
 
@@ -75,6 +78,7 @@ class TechnicalVerificationReport(BaseModel):
     report: str = Field(None, description="The result of the verification process for the given technical task")
 
 class TechnicalOutput(BaseModel):
+    """Respond to the user with technical_analysis_reports when the task_type is ANALYSIS, or technical_verification_reports when the task_type is VERIFICATION"""
     technical_analysis_reports: List[TechnicalAnalysisReport] = Field(None, description="Technical analyst outputs for analysis")
     technical_verification_reports: List[TechnicalVerificationReport] = Field(None, description="Technical analyst reflections for verification")
 
@@ -87,5 +91,6 @@ class PortfolioDecision(BaseModel):
     rationale: str = Field(None, description="Detailed rationale behind the portfolio manager's trading decision for the given stock symbol")
 
 class PortfolioDecisions(BaseModel):
+    """Respond to the user with this"""
     portfolio_decisions: List[PortfolioDecision] = Field(None, description="The portfolio manager's final trading decisions for the next trading day")
 

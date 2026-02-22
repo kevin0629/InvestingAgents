@@ -1,4 +1,5 @@
 from tradingagents.agents.utils.agent_output_formats import FinancialOutput
+from langchain_core.messages import HumanMessage
 
 from tradingagents.agents.utils.agent_utils import (
     get_balance_sheet,
@@ -15,6 +16,19 @@ from tradingagents.agents.utils.agent_utils import (
 
 def create_financial_analyst(llm):
     def financial_analyst_node(state) -> dict:
+        def _extract_payload(result, output_tool_name):
+            tool_calls = getattr(result, "tool_calls", None) or []
+            for call in tool_calls:
+                if call.get("name") == output_tool_name:
+                    return call.get("args", {}) or {}
+            content = getattr(result, "content", None)
+            if isinstance(content, dict):
+                return content
+            return {}
+
+        def _tool_name(tool):
+            return getattr(tool, "name", getattr(tool, "__name__", tool.__class__.__name__))
+
         tools = [
             get_balance_sheet,
             get_cashflow,
@@ -25,7 +39,7 @@ def create_financial_analyst(llm):
             get_monthly_revenue,
             get_river_chart,
         ]
-        tool_names = ", ".join([tool.name for tool in tools])
+        tool_names = ", ".join([_tool_name(tool) for tool in tools])
 
         def _get_value(payload, key, default=""):
             if payload is None:
@@ -82,19 +96,21 @@ Step2: 三大報表分析、財務指標分析、杜邦分析、河流圖分析�
 - strong_sell: 觀望。嚴重脫離基本面，且出現財務警訊 (如現金流轉負)。
 """
 
-        try:
-            llm_for_chain = llm.bind_tools(tools).with_structured_output(FinancialOutput)
-        except Exception:
-            llm_for_chain = llm.with_structured_output(FinancialOutput)
+        llm_with_tools = llm.bind_tools(tools)
 
-        result = llm_for_chain.invoke(prompt)
+        messages = list(state.get("messages", []))
+        messages.append(HumanMessage(content=prompt))
+        result = llm_with_tools.invoke(messages)
 
-        analysis_reports = getattr(result, "financial_analysis_reports", None)
-        verification_reports = getattr(result, "financial_verification_reports", None)
+        report = _extract_payload(result, FinancialOutput.__name__)
+        analysis_reports = report.get("financial_analysis_reports", [])
+        verification_reports = report.get("financial_verification_reports", [])
 
-        if analysis_reports is not None:
-            return {"financial_analysis_reports": analysis_reports}
-        else:
-            return {"financial_verification_reports": verification_reports}
+        output = {"messages": [result]}
+        if analysis_reports:
+            output["financial_analysis_reports"] = analysis_reports
+        if verification_reports:
+            output["financial_verification_reports"] = verification_reports
+        return output
 
     return financial_analyst_node

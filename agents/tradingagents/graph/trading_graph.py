@@ -33,6 +33,15 @@ from tradingagents.agents.utils.agent_utils import (
     retrieve_reflections
 )
 
+from tradingagents.agents.utils.agent_output_formats import (
+    CoordinatorOutput, 
+    FinancialOutput, 
+    NewsOutput, 
+    TechnicalOutput, 
+    PortfolioDecisions
+)
+
+
 
 class TradingAgentsGraph:
     """
@@ -122,12 +131,18 @@ class TradingAgentsGraph:
                     # market data tools
                     get_taiex_data,
                     search_news,
+
+                    # output format
+                    CoordinatorOutput
                 ]
             ),
             "technical": ToolNode(
                 [
                     # Core stock data tools
-                    get_stock_data
+                    get_stock_data,
+
+                     # output format
+                    TechnicalOutput
                 ]
             ),
             "news": ToolNode(
@@ -135,6 +150,9 @@ class TradingAgentsGraph:
                     # News and company information
                     get_company_info,
                     search_news,
+
+                     # output format
+                    NewsOutput
                 ]
             ),
             "fundamental": ToolNode(
@@ -147,7 +165,10 @@ class TradingAgentsGraph:
                     get_monthly_revenue,
                     get_factors,
                     get_dupont_analysis,
-                    get_river_chart
+                    get_river_chart,
+
+                    # output format
+                    FinancialOutput
                 ]
             ),
             "critic": ToolNode(
@@ -160,6 +181,9 @@ class TradingAgentsGraph:
                 [
                     # Reflection retrieval for portfolio manager
                     retrieve_reflections,
+
+                    # output format
+                    PortfolioDecisions
                 ]
              ),
         }
