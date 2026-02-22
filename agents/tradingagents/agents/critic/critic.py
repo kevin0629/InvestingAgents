@@ -1,66 +1,50 @@
-import time
-import json
+from tradingagents.agents.utils.agent_output_formats import FinancialOutput
+
+from tradingagents.agents.utils.agent_utils import store_reflection
+
 
 
 def create_critic(llm):
     def critic_node(state) -> dict:
+        tools = [store_reflection]
+        tool_names = ", ".join([tool.name for tool in tools])
 
-        company_name = state["company_of_interest"]
+        financial_verification = state["financial_verification_reports"]
+        news_verification = state["news_verification_reports"]
+        technical_verification = state["technical_verification_reports"]
+        
 
-        history = state["risk_debate_state"]["history"]
-        risk_debate_state = state["risk_debate_state"]
-        market_research_report = state["market_report"]
-        news_report = state["news_report"]
-        fundamentals_report = state["news_report"]
-        sentiment_report = state["sentiment_report"]
-        trader_plan = state["investment_plan"]
+        prompt = f"""你是一位投資決策系統中的事後檢討稽核員。你的職責是針對上期庫存進行歸因分析。
+你需要整合來自 Financial, Technical, News Analyst 的驗證報告，對比當初的買入理由與實際發生的結果，找出決策成功/失敗的根本原因，並透過 {tool_names} 儲存成記憶，供未來交易參考\n
+Financial Analyst 的驗證報告: {financial_verification}\n
+Technical Analyst 的驗證報告: {technical_verification}\n
+News Analyst 的驗證報告: {news_verification}\n
 
-        curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}"
-        past_memories = memory.get_memories(curr_situation, n_matches=2)
+分析方法:
+    Step1: 事實核對\n
+    - 情境 A： 預測發生了，股價也漲了 -> 決策正確（記錄成功模式）
+    - 情境 B： 預測發生了，但股價跌了 -> 市場定價錯誤 或 忽略了其他風險（需深度檢討）
+    - 情境 C： 預測沒發生（例如營收不如預期） -> 分析失準（需檢討分析邏輯）
+    Step2: 偏誤識別\n
+    - 確認偏誤： 是否只看利多新聞，忽略了當時已存在的利空訊號？
+    - 過度樂觀： 是否對未實現的「轉機」給予過高權重？
+    - 技術/基本面背離： 是否在基本面轉好但技術面崩盤時，執意進場接刀？
+    Step3: 提煉教訓\n
+    - 將分析結果轉化為 **通用的投資原則**，並使用 {tool_names} 儲存成記憶，供未來交易參考。例如: "當基本面出現明顯轉機但技術面尚未反應時，應該耐心等待技術指標確認轉勢後再進場，以避免過早接刀的風險"。
+    - 原則必須具體且可執行，供 Portfolio Manager 下次決策參考
 
-        past_memory_str = ""
-        for i, rec in enumerate(past_memories, 1):
-            past_memory_str += rec["recommendation"] + "\n\n"
+最後要依 股票代號、買入理由、驗證結果、學到的經驗教訓 將結果以markdown格式儲存成報告
+"""
 
-        prompt = f"""As the Risk Management Judge and Debate Facilitator, your goal is to evaluate the debate between three risk analysts—Aggressive, Neutral, and Conservative—and determine the best course of action for the trader. Your decision must result in a clear recommendation: Buy, Sell, or Hold. Choose Hold only if strongly justified by specific arguments, not as a fallback when all sides seem valid. Strive for clarity and decisiveness.
+        llm_with_tools = llm.bind_tools(tools)
 
-Guidelines for Decision-Making:
-1. **Summarize Key Arguments**: Extract the strongest points from each analyst, focusing on relevance to the context.
-2. **Provide Rationale**: Support your recommendation with direct quotes and counterarguments from the debate.
-3. **Refine the Trader's Plan**: Start with the trader's original plan, **{trader_plan}**, and adjust it based on the analysts' insights.
-4. **Learn from Past Mistakes**: Use lessons from **{past_memory_str}** to address prior misjudgments and improve the decision you are making now to make sure you don't make a wrong BUY/SELL/HOLD call that loses money.
+        result = llm_with_tools.invoke(prompt)
 
-Deliverables:
-- A clear and actionable recommendation: Buy, Sell, or Hold.
-- Detailed reasoning anchored in the debate and past reflections.
+        reflection = ""
 
----
+        if len(result.tool_calls) == 0:
+            reflection = result.contents
 
-**Analysts Debate History:**  
-{history}
-
----
-
-Focus on actionable insights and continuous improvement. Build on past lessons, critically evaluate all perspectives, and ensure each decision advances better outcomes."""
-
-        response = llm.invoke(prompt)
-
-        new_risk_debate_state = {
-            "judge_decision": response.content,
-            "history": risk_debate_state["history"],
-            "aggressive_history": risk_debate_state["aggressive_history"],
-            "conservative_history": risk_debate_state["conservative_history"],
-            "neutral_history": risk_debate_state["neutral_history"],
-            "latest_speaker": "Judge",
-            "current_aggressive_response": risk_debate_state["current_aggressive_response"],
-            "current_conservative_response": risk_debate_state["current_conservative_response"],
-            "current_neutral_response": risk_debate_state["current_neutral_response"],
-            "count": risk_debate_state["count"],
-        }
-
-        return {
-            "risk_debate_state": new_risk_debate_state,
-            "final_trade_decision": response.content,
-        }
+        return {"critic_reflection": reflection}
 
     return critic_node

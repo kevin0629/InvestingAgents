@@ -43,6 +43,21 @@ def create_financial_analyst(llm):
 - NEUTRAL: 無法判斷或雜訊過多
 
 Step2: 三大報表分析、財務指標分析、杜邦分析、河流圖分析等工具，從財務面分析{symbol}的表現，並評估未來股價上升的可能性。請具體分析財務數據，並給出結論。\n
+1. 三大報表分析:\n
+- 損益表: 分析近期的營收、毛利、營業利益及淨利，判斷公司的成長趨勢
+- 資產負債表: 分析公司的資產結構、負債結構及股東權益，評估公司的財務穩健程度
+- 現金流量表: 分析公司的營運現金流、投資現金流及融資現金流，評估公司的現金流狀況
+
+2. 財務指標分析:\n
+- 獲利能力指標: 如毛利率、營業利益率、淨利率等，評估公司的獲利能力
+- 償債能力指標: 如流動比率、負債比率等，評估公司的償債能力
+- 經營效率指標: 如存貨週轉天數、應收帳款週轉天數等，評估公司的經營效率
+
+3. 杜邦分析:\n
+- 分析公司的ROE，並拆解成淨利率、資產週轉率和財務槓桿，評估公司的盈利能力和經營效率
+
+4. 河流圖分析:\n
+- 分析公司目前的本益比位於歷史區間的相對高點、低點或平均水平？ 分析本益比的變動，是否與公司 EPS 增長的趨勢相匹配\n
 
 列出具體的財務風險，例如：應收帳款異常增加\n
 你的所有結論都必須基於嚴謹的財務數據與量化證據，並保持客觀中立的判斷，給出投資建議:\n
@@ -58,29 +73,16 @@ Step2: 三大報表分析、財務指標分析、杜邦分析、河流圖分析�
 
         result = structured_llm_with_tools.invoke(prompt)
 
-        market_situation = ""
-        end_date = ""
-        
-        strategy = ""
-        technical_tasks = None
-        fundamental_tasks = None
-        news_tasks = None
+        analysis_reports = None
+        verification_reports = None
 
         if len(result.tool_calls) == 0:
-            market_situation = result.market_situation
-            end_date = result.end_date
-            strategy = result.strategy
-            technical_tasks = result.technical_tasks
-            fundamental_tasks = result.fundamental_tasks
-            news_tasks = result.news_tasks
+            analysis_reports = result.financial_analysis_reports
+            verification_reports = result.financial_verification_reports
 
-        return {
-            "market_situation": market_situation,
-            "end_date": end_date,
-            "strategy": strategy,
-            "technical_tasks": technical_tasks,
-            "fundamental_tasks": fundamental_tasks,
-            "news_tasks": news_tasks,
-        }
+        if analysis_reports is not None:
+            return {"financial_analysis_reports": analysis_reports}
+        else:
+            return {"financial_verification_reports": verification_reports}
 
     return financial_analyst_node

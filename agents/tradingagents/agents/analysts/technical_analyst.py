@@ -1,56 +1,55 @@
-from tradingagents.agents.utils.agent_utils import get_stock_data, get_taiex_data
+from tradingagents.agents.utils.agent_output_formats import TechnicalOutput
+from tradingagents.agents.utils.agent_utils import get_stock_data
 
 
 
-def create_technical_analyst(llm, memory):
+def create_technical_analyst(llm):
     def technical_analyst_node(state) -> dict:
-        history = state["investment_debate_state"].get("history", "")
-        market_research_report = state["market_report"]
-        sentiment_report = state["sentiment_report"]
-        news_report = state["news_report"]
-        fundamentals_report = state["fundamentals_report"]
+        tools = [get_stock_data]
+        tool_names = ", ".join([tool.name for tool in tools])
 
-        investment_debate_state = state["investment_debate_state"]
+        task = state["technical_tasks"]["task"]
+        symbol = task["symbol"]
+        task_type = task["task_type"]
+        buy_reason = task["buy_reason"]
+        task = task["task"]
 
-        curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}"
-        past_memories = memory.get_memories(curr_situation, n_matches=2)
+        prompt = f"""你是一位技術分析師，負責分析{symbol}的價格、成交量與技術指標，並進一步判讀未來的走勢。\n
 
-        past_memory_str = ""
-        for i, rec in enumerate(past_memories, 1):
-            past_memory_str += rec["recommendation"] + "\n\n"
+        你可以使用下列工具取得額外資訊: {tool_names}\n
+        任務指引: task_type 為 {task_type}。若 `task_type` 是 VERIFICATION，代表這是庫存股，你必須先驗證 上其購買理由({buy_reason}) 有沒有符合預期，並偵測盲點，確認沒有忽略其他狀況，再分析未來並決定是否繼續持有或加碼減碼。\n
+在分析{symbol}的技術面時，請務必從以下幾個層面進行全面的評估：
+1. 趨勢與價位分析: 判斷目前股價處於長期、中期、短期分別處於何種趨勢（上升、下降、或盤整），並指出圖表上關鍵的「支撐」與「壓力」區間
+2. 技術指標分析: 分析中期、長期移動平均線（例如 20MA, 60MA, 240MA）的排列狀況，判斷市場是處於多頭或空頭排列;
+   檢視 RSI 指標的數值，判斷市場是否處於超買 (>70) 或超賣 (<30) 狀態，並特別注意是否存在價格與指標走勢相反的「背離」現象;
+   分析 MACD 的快慢線交叉情況與柱狀體的變化，以判斷市場動能的增強或減弱;
+   檢視布林通道的帶寬變化，判斷市場波動性的收斂或擴張，分析股價與上、中、下三條軌道的互動關係
+3. 型態與成交量分析: 識別圖表上是否正在形成經典的價格型態，例如：頭肩頂/底、W底/M頭、旗形、或是三角收斂等，分析成交量的變化。一個健康的趨勢通常伴隨著成交量的支持（例如：價漲量增），若出現價量背離（例如：價漲量縮），則需提出警示
 
-        prompt = f"""As the portfolio manager and debate facilitator, your role is to critically evaluate this round of debate and make a definitive decision: align with the bear analyst, the bull analyst, or choose Hold only if it is strongly justified based on the arguments presented.
+綜合以上所有分析，嚴格對照下面的邏輯產出最終的「交易建議」:
+- strong_buy: 長、中、短期趨勢皆為多頭，且 RSI 無頂部背離，成交量配合價漲
+- buy: 長期多頭，中期多頭，短線回測支撐有守，長線趨勢保護
+- neutral: 長中短期趨勢不一致（例如：長期多頭但中期跌破支撐），或處於布林帶壓縮的情況
+- sell: 長期空頭，中期反彈無力
+- strong_sell: 長、中、短期趨勢皆為空頭，且 RSI 無底部背離，成交量配合價跌
+"""
 
-Summarize the key points from both sides concisely, focusing on the most compelling evidence or reasoning. Your recommendation—Buy, Sell, or Hold—must be clear and actionable. Avoid defaulting to Hold simply because both sides have valid points; commit to a stance grounded in the debate's strongest arguments.
+        structured_llm = llm.with_structured_output(TechnicalOutput)
+        structured_llm_with_tools = structured_llm.bind_tools(tools)
 
-Additionally, develop a detailed investment plan for the trader. This should include:
+        result = structured_llm_with_tools.invoke(prompt)
 
-Your Recommendation: A decisive stance supported by the most convincing arguments.
-Rationale: An explanation of why these arguments lead to your conclusion.
-Strategic Actions: Concrete steps for implementing the recommendation.
-Take into account your past mistakes on similar situations. Use these insights to refine your decision-making and ensure you are learning and improving. Present your analysis conversationally, as if speaking naturally, without special formatting. 
+        analysis_reports = None
+        verification_reports = None
 
-Here are your past reflections on mistakes:
-\"{past_memory_str}\"
+        if len(result.tool_calls) == 0:
+            analysis_reports = result.technical_analysis_reports
+            verification_reports = result.technical_verification_reports
 
-Here is the debate:
-Debate History:
-{history}"""
-        response = llm.invoke(prompt)
-
-        new_investment_debate_state = {
-            "judge_decision": response.content,
-            "history": investment_debate_state.get("history", ""),
-            "bear_history": investment_debate_state.get("bear_history", ""),
-            "bull_history": investment_debate_state.get("bull_history", ""),
-            "current_response": response.content,
-            "count": investment_debate_state["count"],
-        }
-
-        return {
-            "investment_debate_state": new_investment_debate_state,
-            "investment_plan": response.content,
-        }
+        if analysis_reports is not None:
+            return {"technical_analysis_reports": analysis_reports}
+        else:
+            return {"technical_verification_reports": verification_reports}
 
     return technical_analyst_node
 

@@ -40,6 +40,8 @@ def create_coordinator(llm):
 
         result = chain.invoke(state["messages"])
 
+        user_query = ""
+        mode = ""
         market_situation = ""
         end_date = ""
         
@@ -49,6 +51,8 @@ def create_coordinator(llm):
         news_tasks = None
 
         if len(result.tool_calls) == 0:
+            user_query = result.user_query
+            mode = result.mode
             market_situation = result.market_situation
             end_date = result.end_date
             strategy = result.strategy
@@ -57,6 +61,8 @@ def create_coordinator(llm):
             news_tasks = result.news_tasks
 
         return {
+            "user_query": user_query,
+            "mode": mode,
             "market_situation": market_situation,
             "end_date": end_date,
             "strategy": strategy,
