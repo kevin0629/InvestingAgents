@@ -143,7 +143,8 @@ class TradingAgentsGraph:
 
                      # output format
                     TechnicalOutput
-                ]
+                ],
+                messages_key="technical_messages",
             ),
             "news": ToolNode(
                 [
@@ -153,7 +154,8 @@ class TradingAgentsGraph:
 
                      # output format
                     NewsOutput
-                ]
+                ],
+                messages_key="news_messages",
             ),
             "fundamental": ToolNode(
                 [
@@ -169,7 +171,8 @@ class TradingAgentsGraph:
 
                     # output format
                     FinancialOutput
-                ]
+                ],
+                messages_key="financial_messages",
             ),
             "critic": ToolNode(
                 [
@@ -180,11 +183,12 @@ class TradingAgentsGraph:
              "portfolio manager": ToolNode(
                 [
                     # Reflection retrieval for portfolio manager
-                    retrieve_reflections,
+                    # retrieve_reflections,
 
                     # output format
                     PortfolioDecisions
-                ]
+                ],
+                messages_key="portfolio_messages",
              ),
         }
 

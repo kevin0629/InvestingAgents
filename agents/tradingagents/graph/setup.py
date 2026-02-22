@@ -18,6 +18,13 @@ from tradingagents.agents import (
     create_news_analyst,
     create_portfolio_manager,
 )
+from tradingagents.agents.utils.agent_output_formats import (
+    CoordinatorOutput,
+    FinancialOutput,
+    TechnicalOutput,
+    NewsOutput,
+    PortfolioDecisions,
+)
 
 
 class GraphSetup:
@@ -34,8 +41,8 @@ class GraphSetup:
         self.deep_thinking_llm = deep_thinking_llm
         self.tool_nodes = tool_nodes
 
-    def _has_tool_calls(self, state: Dict[str, Any]) -> bool:
-        messages = state.get("messages") or []
+    def _has_tool_calls(self, state: Dict[str, Any], message_key: str = "messages") -> bool:
+        messages = state.get(message_key) or []
         if not messages:
             return False
         last_message = messages[-1]
@@ -47,6 +54,14 @@ class GraphSetup:
                 return f"tools_{key}"
         return None
 
+    def _is_only_response_tool_call(self, state: Dict[str, Any], tool_name: str, message_key: str = "messages") -> bool:
+        messages = state.get(message_key) or []
+        if not messages:
+            return False
+        last_message = messages[-1]
+        tool_calls = getattr(last_message, "tool_calls", None) or []
+        return len(tool_calls) == 1 and tool_calls[0].get("name") == tool_name
+
     def _assign_analyst_workers(self, state: AgentState) -> List[Send]:
         sends: List[Send] = []
 
@@ -57,17 +72,37 @@ class GraphSetup:
                 return bool(task.get("symbol"))
             return bool(getattr(task, "symbol", None))
 
-        for task in state.get("financial_tasks") or []:
-            if _task_has_symbol(task):
-                sends.append(Send("Financial Analyst", {"financial_task": task}))
+        # Pass every field the analyst nodes read directly via Send payload.
+        # LangGraph's Send API gives the worker node ONLY what is in this dict —
+        # it does NOT automatically inherit the parent graph's state.
+        shared_ctx = {
+            "user_query": state.get("user_query", ""),
+            "mode": state.get("mode", ""),
+            "market_situation": state.get("market_situation", ""),
+            "end_date": state.get("end_date", ""),
+            "strategy": state.get("strategy", ""),
+        }
 
-        for task in state.get("technical_tasks") or []:
-            if _task_has_symbol(task):
-                sends.append(Send("Technical Analyst", {"technical_task": task}))
+        if any(_task_has_symbol(task) for task in (state.get("financial_tasks") or [])):
+            sends.append(Send("Financial Analyst", {
+                **shared_ctx,
+                "financial_tasks": state.get("financial_tasks", []),
+                "financial_messages": state.get("financial_messages", []),
+            }))
 
-        for task in state.get("news_tasks") or []:
-            if _task_has_symbol(task):
-                sends.append(Send("News Analyst", {"news_task": task}))
+        if any(_task_has_symbol(task) for task in (state.get("technical_tasks") or [])):
+            sends.append(Send("Technical Analyst", {
+                **shared_ctx,
+                "technical_tasks": state.get("technical_tasks", []),
+                "technical_messages": state.get("technical_messages", []),
+            }))
+
+        if any(_task_has_symbol(task) for task in (state.get("news_tasks") or [])):
+            sends.append(Send("News Analyst", {
+                **shared_ctx,
+                "news_tasks": state.get("news_tasks", []),
+                "news_messages": state.get("news_messages", []),
+            }))
 
         if not sends:
             sends.append(Send("Analysis Gate", {}))
@@ -75,26 +110,34 @@ class GraphSetup:
         return sends
 
     def _route_from_coordinator(self, state: AgentState):
+        if self._is_only_response_tool_call(state, CoordinatorOutput.__name__):
+            return self._assign_analyst_workers(state)
         coordinator_tools_node = self._resolve_tool_node_name("coordinator")
         if coordinator_tools_node and self._has_tool_calls(state):
             return coordinator_tools_node
         return self._assign_analyst_workers(state)
 
     def _route_financial(self, state: AgentState) -> str:
+        if self._is_only_response_tool_call(state, FinancialOutput.__name__, "financial_messages"):
+            return "Analysis Gate"
         financial_tools_node = self._resolve_tool_node_name("financial", "fundamental")
-        if financial_tools_node and self._has_tool_calls(state):
+        if financial_tools_node and self._has_tool_calls(state, "financial_messages"):
             return financial_tools_node
         return "Analysis Gate"
 
     def _route_technical(self, state: AgentState) -> str:
+        if self._is_only_response_tool_call(state, TechnicalOutput.__name__, "technical_messages"):
+            return "Analysis Gate"
         technical_tools_node = self._resolve_tool_node_name("technical")
-        if technical_tools_node and self._has_tool_calls(state):
+        if technical_tools_node and self._has_tool_calls(state, "technical_messages"):
             return technical_tools_node
         return "Analysis Gate"
 
     def _route_news(self, state: AgentState) -> str:
+        if self._is_only_response_tool_call(state, NewsOutput.__name__, "news_messages"):
+            return "Analysis Gate"
         news_tools_node = self._resolve_tool_node_name("news")
-        if news_tools_node and self._has_tool_calls(state):
+        if news_tools_node and self._has_tool_calls(state, "news_messages"):
             return news_tools_node
         return "Analysis Gate"
 
@@ -118,8 +161,10 @@ class GraphSetup:
         return "Portfolio Manager"
 
     def _route_portfolio_manager(self, state: AgentState) -> str:
+        if self._is_only_response_tool_call(state, PortfolioDecisions.__name__, "portfolio_messages"):
+            return END
         portfolio_tools_node = self._resolve_tool_node_name("portfolio manager", "portfolio_manager")
-        if portfolio_tools_node and self._has_tool_calls(state):
+        if portfolio_tools_node and self._has_tool_calls(state, "portfolio_messages"):
             return portfolio_tools_node
         return END
 

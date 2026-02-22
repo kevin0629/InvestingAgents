@@ -19,7 +19,7 @@ def create_portfolio_manager(llm):
         def _tool_name(tool):
             return getattr(tool, "name", getattr(tool, "__name__", tool.__class__.__name__))
         
-        tools = [retrieve_reflections, PortfolioDecisions]
+        tools = [PortfolioDecisions]
         tool_names = ", ".join([_tool_name(tool) for tool in tools])
 
         def _get_value(payload, key, default=""):
@@ -57,7 +57,6 @@ def create_portfolio_manager(llm):
 
         來自三個子的詳細分析結果與評分: {financial_analysis_reports}、{technical_analysis_reports}、{news_analysis_reports}\n
         來自三個子的驗證報告: {financial_verification_reports}、{technical_verification_reports}、{news_verification_reports}\n
-        你可以從 {tool_names} 中檢索過去的投資決策反思與教訓，以避免重蹈覆轍\n
         當前的市場情況是: {market_situation}\n
         你的投資策略是: {strategy}\n
         
@@ -67,17 +66,21 @@ def create_portfolio_manager(llm):
 2. 訊號衝突解決: 若 Financial 評為 "Strong_Sell" (有地雷/假帳風險)，無論技術面多好，一律拒絕買進。若 Technical 評為 "Strong_Sell" (趨勢完全破壞)，除非是超長線價值投資，否則暫緩買進。
 3. 部位管理: 根據最終信心分數 (0-10) 決定動作，Score > 8: Aggressive Buy (建倉/加碼 10-15% 權重)，Score 7: Buy (建倉 5-8% 權重)，Score 5~6: Hold (觀望/續抱)。Score < 5: Sell (減碼/清倉)
 """
+# 待加入: 你可以從 {tool_names} 中檢索過去的投資決策反思與教訓，以避免重蹈覆轍\n
+        try:
+            llm_with_tools = llm.bind_tools(tools, tool_choice="any")
+        except Exception:
+            llm_with_tools = llm.bind_tools(tools)
 
-        llm_with_tools = llm.bind_tools(tools)
-
-        messages = list(state.get("messages", []))
-        messages.append(HumanMessage(content=prompt))
+        messages = list(state.get("portfolio_messages", []))
+        if not messages:
+            messages = [HumanMessage(content=prompt)]
         result = llm_with_tools.invoke(messages)
 
         report = _extract_payload(result, PortfolioDecisions.__name__)
         portfolio_decisions = report.get("portfolio_decisions", [])
 
-        output = {"messages": [result]}
+        output = {"portfolio_messages": [result]}
         if portfolio_decisions:
             output["portfolio_decisions"] = portfolio_decisions
         return output

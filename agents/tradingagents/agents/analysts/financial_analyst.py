@@ -29,7 +29,7 @@ def create_financial_analyst(llm):
         def _tool_name(tool):
             return getattr(tool, "name", getattr(tool, "__name__", tool.__class__.__name__))
 
-        tools = [
+        data_tools = [
             get_balance_sheet,
             get_cashflow,
             get_company_info,
@@ -39,7 +39,8 @@ def create_financial_analyst(llm):
             get_monthly_revenue,
             get_river_chart,
         ]
-        tool_names = ", ".join([_tool_name(tool) for tool in tools])
+        llm_tools = data_tools + [FinancialOutput]  # include output schema so LLM can terminate loop
+        tool_names = ", ".join([_tool_name(tool) for tool in data_tools])
 
         def _get_value(payload, key, default=""):
             if payload is None:
@@ -49,21 +50,43 @@ def create_financial_analyst(llm):
             return getattr(payload, key, default)
 
         task_payload = state.get("financial_task")
-        if task_payload is None:
+        task_payloads = []
+        if task_payload is not None:
+            task_payloads = [task_payload]
+        else:
             financial_tasks = state.get("financial_tasks") or []
-            if isinstance(financial_tasks, list) and financial_tasks:
-                task_payload = financial_tasks[0]
+            if isinstance(financial_tasks, list):
+                task_payloads = financial_tasks
             elif isinstance(financial_tasks, dict):
-                task_payload = financial_tasks.get("task")
+                task_payloads = [financial_tasks]
 
-        symbol = _get_value(task_payload, "symbol", "")
-        task_type = _get_value(task_payload, "task_type", "")
-        buy_reason = _get_value(task_payload, "buy_reason", "")
-        task = _get_value(task_payload, "task", "")
+        symbols = [str(_get_value(task, "symbol", "")) for task in task_payloads if _get_value(task, "symbol", "")]
+        task_types = [str(_get_value(task, "task_type", "")) for task in task_payloads if _get_value(task, "task_type", "")]
+        task_descriptions = [str(_get_value(task, "task", "")) for task in task_payloads if _get_value(task, "task", "")]
+        buy_reasons = [str(_get_value(task, "buy_reason", "")) for task in task_payloads if _get_value(task, "buy_reason", "")]
+
+        symbol = ", ".join(symbols)
+        task_type = ", ".join(task_types)
+        task = "\n".join([f"- {description}" for description in task_descriptions])
+        buy_reason = "\n".join([f"- {reason}" for reason in buy_reasons])
+
+        # --- DEBUG ---
+        print(f"\n[Financial Analyst] received {len(task_payloads)} task(s)")
+        print(f"  symbols   : {symbols}")
+        print(f"  task_type : {task_type}")
+        for _i, _t in enumerate(task_payloads):
+            print(f"  task[{_i}]  : {_t}")
+        print(f"  financial_messages so far: {len(state.get('financial_messages', []))}")
+
+        if not symbols:
+            print("[Financial Analyst] No valid symbols — skipping.")
+            return {}
 
         prompt = f"""你是一位財務分析師，負責評估{symbol}股價是被低估還是被高估，並分析未來公司股價上升的可能性。\n
         你的任務為 {task}\n
         你可以使用下列工具取得額外資訊: {tool_names}\n
+        你只能查詢以下股票代號的資料：{symbol}。
+        絕對禁止查詢任何未在上方列出的股票代號（例如 UNKNOWN 或其他任何代號）。若工具呼叫的 symbol 參數不在 [{symbol}] 清單內，視為違規，請立即停止並改用正確代號。\n
         Step1: task_type 為 {task_type}。若 `task_type` 是 VERIFICATION，代表這是庫存股，你必須先驗證{buy_reason}有沒有符合預期，並偵測盲點，確認沒有忽略其他狀況，再分析未來並決定是否繼續持有。\n
 判斷標準範例: 
 - SUCCESS: 數據完全支持當初的論點（例如：預測毛利升，真的升了）
@@ -96,17 +119,21 @@ Step2: 三大報表分析、財務指標分析、杜邦分析、河流圖分析�
 - strong_sell: 觀望。嚴重脫離基本面，且出現財務警訊 (如現金流轉負)。
 """
 
-        llm_with_tools = llm.bind_tools(tools)
+        try:
+            llm_with_tools = llm.bind_tools(llm_tools, tool_choice="any")
+        except Exception:
+            llm_with_tools = llm.bind_tools(llm_tools)
 
-        messages = list(state.get("messages", []))
-        messages.append(HumanMessage(content=prompt))
+        messages = list(state.get("financial_messages", []))
+        if not messages:
+            messages = [HumanMessage(content=prompt)]
         result = llm_with_tools.invoke(messages)
 
         report = _extract_payload(result, FinancialOutput.__name__)
         analysis_reports = report.get("financial_analysis_reports", [])
         verification_reports = report.get("financial_verification_reports", [])
 
-        output = {"messages": [result]}
+        output = {"financial_messages": [result]}
         if analysis_reports:
             output["financial_analysis_reports"] = analysis_reports
         if verification_reports:

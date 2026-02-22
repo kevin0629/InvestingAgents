@@ -24,6 +24,7 @@ def create_news_analyst(llm):
             search_news,
         ]
         tool_names = ", ".join([_tool_name(tool) for tool in tools])
+        llm_tools = tools + [NewsOutput]  # include output schema so LLM can terminate loop
 
         def _get_value(payload, key, default=""):
           if payload is None:
@@ -33,22 +34,47 @@ def create_news_analyst(llm):
           return getattr(payload, key, default)
 
         task_payload = state.get("news_task")
-        if task_payload is None:
+        task_payloads = []
+        if task_payload is not None:
+          task_payloads = [task_payload]
+        else:
           news_tasks = state.get("news_tasks") or []
-          if isinstance(news_tasks, list) and news_tasks:
-            task_payload = news_tasks[0]
+          if isinstance(news_tasks, list):
+            task_payloads = news_tasks
           elif isinstance(news_tasks, dict):
-            task_payload = news_tasks.get("task")
+            task_payloads = [news_tasks]
 
-        symbol = _get_value(task_payload, "symbol", "")
-        task_type = _get_value(task_payload, "task_type", "")
-        buy_reason = _get_value(task_payload, "buy_reason", "")
-        task = _get_value(task_payload, "task", "")
+        symbols = [str(_get_value(task, "symbol", "")) for task in task_payloads if _get_value(task, "symbol", "")]
+        task_types = [str(_get_value(task, "task_type", "")) for task in task_payloads if _get_value(task, "task_type", "")]
+        task_descriptions = [str(_get_value(task, "task", "")) for task in task_payloads if _get_value(task, "task", "")]
+        buy_reasons = [str(_get_value(task, "buy_reason", "")) for task in task_payloads if _get_value(task, "buy_reason", "")]
+
+        symbol = ", ".join(symbols)
+        task_type = ", ".join(task_types)
+        task = "\n".join([f"- {description}" for description in task_descriptions])
+        buy_reason = "\n".join([f"- {reason}" for reason in buy_reasons])
+
+        # --- DEBUG ---
+        print(f"\n[News Analyst] received {len(task_payloads)} task(s)")
+        print(f"  symbols   : {symbols}")
+        print(f"  task_type : {task_type}")
+        for _i, _t in enumerate(task_payloads):
+            print(f"  task[{_i}]  : {_t}")
+        print(f"  news_messages so far: {len(state.get('news_messages', []))}")
+
+        if not symbols:
+            print("[News Analyst] No valid symbols — skipping.")
+            return {}
 
         prompt = f"""你是一位新聞分析師。你的專長是從紛雜的新聞資訊中，提煉出對{symbol}股價有實質影響的催化劑。你負責分析非結構化的文字資訊（擴廠、新產能、新技術、新產品、產業趨勢、供應鏈等），並將其轉化為對未來股價的影響力評估。\n
 
         你的任務為 {task}\n
         你可以使用下列工具取得額外資訊: {tool_names}\n
+        【search_news 使用規則 — 嚴格遵守】
+        每次呼叫 `search_news` 的 query 參數必須符合以下格式：「<股票代號或公司名稱> + 具體業務關鍵字」。
+        例如：「{symbol} 擴廠計畫 2025」、「{symbol} 新客戶訂單」、「{symbol} 供應鏈缺貨」、「{symbol} 併購案」。
+        禁止使用與 {symbol} 無關的泛用詞（例如「公司新聞分析」、「新聞分析師指南」等）作為 query。
+        每個 query 都必須以 {symbol} 的股票代號或公司名稱起頭，確保搜索結果聚焦在目標公司。\n
         任務指引: task_type 為 {task_type}。若 `task_type` 是 VERIFICATION，代表這是庫存股，你必須先驗證 上其購買理由({buy_reason}) 有沒有符合預期，並偵測盲點，確認沒有忽略其他狀況，再分析未來並決定是否繼續持有或加碼減碼。\n
 在執行分析前，你必須先獲得公司相關資料再構思搜尋關鍵字：
 - 針對擴張事件(含併購、擴產等): 搜索近期相關事件，搜索完畢後彙整並清晰描述該事件的具體內容（例如：收購對象、擴建產能規模、合併條款等）; 
@@ -80,17 +106,21 @@ def create_news_analyst(llm):
 - strong_sell: 溢價收購或無助核心競爭力的行為，不利股東，建議避開
 """
 
-        llm_with_tools = llm.bind_tools(tools)
+        try:
+          llm_with_tools = llm.bind_tools(llm_tools, tool_choice="any")
+        except Exception:
+          llm_with_tools = llm.bind_tools(llm_tools)
 
-        messages = list(state.get("messages", []))
-        messages.append(HumanMessage(content=prompt))
+        messages = list(state.get("news_messages", []))
+        if not messages:
+          messages = [HumanMessage(content=prompt)]
         result = llm_with_tools.invoke(messages)
 
         report = _extract_payload(result, NewsOutput.__name__)
         analysis_reports = report.get("news_analysis_reports", [])
         verification_reports = report.get("news_verification_reports", [])
 
-        output = {"messages": [result]}
+        output = {"news_messages": [result]}
         if analysis_reports:
           output["news_analysis_reports"] = analysis_reports
         if verification_reports:

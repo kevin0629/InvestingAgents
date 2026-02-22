@@ -50,31 +50,59 @@ def create_coordinator(llm):
         prompt = prompt.partial(system_message=system_message)
         prompt = prompt.partial(tool_names=", ".join([_tool_name(tool) for tool in tools]))
 
-        llm_with_tools = llm.bind_tools(tools)
+        try:
+            llm_with_tools = llm.bind_tools(tools, tool_choice="any")
+        except Exception:
+            llm_with_tools = llm.bind_tools(tools)
 
         chain = prompt | llm_with_tools
 
         result = chain.invoke({"messages": state.get("messages", [])})
 
-        user_query = ""
-        mode = ""
-        market_situation = ""
-        end_date = ""
-        
-        strategy = ""
-        technical_tasks = []
-        financial_tasks = []
-        news_tasks = []
-
         report = _extract_payload(result, CoordinatorOutput.__name__)
-        user_query = report.get("user_query", "")
-        mode = report.get("mode", "")
-        market_situation = report.get("market_situation", "")
-        end_date = report.get("end_date", "")
-        strategy = report.get("strategy", "")
-        technical_tasks = report.get("technical_tasks", [])
-        financial_tasks = report.get("financial_tasks", [])
-        news_tasks = report.get("news_tasks", [])
+
+        def _is_valid_symbol(task) -> bool:
+            """Reject pseudo-symbol slugs — only accept real exchange tickers."""
+            if not task:
+                return False
+            symbol = task.get("symbol") if isinstance(task, dict) else getattr(task, "symbol", None)
+            if not symbol:
+                return False
+            sym = str(symbol).strip()
+            # Reject if it contains underscores/spaces or is clearly descriptive (>12 chars with no digits)
+            if "_" in sym or " " in sym:
+                return False
+            if len(sym) > 12:
+                return False
+            return True
+
+        def _filter_tasks(tasks):
+            if not tasks:
+                return []
+            return [t for t in tasks if _is_valid_symbol(t)]
+
+        if not report:
+            return {
+                "messages": [result],
+            }
+
+        user_query = report.get("user_query", state.get("user_query", ""))
+        mode = report.get("mode", state.get("mode", ""))
+        market_situation = report.get("market_situation", state.get("market_situation", ""))
+        end_date = report.get("end_date", state.get("end_date", ""))
+        strategy = report.get("strategy", state.get("strategy", ""))
+        technical_tasks = _filter_tasks(report.get("technical_tasks", state.get("technical_tasks", [])))
+        financial_tasks = _filter_tasks(report.get("financial_tasks", state.get("financial_tasks", [])))
+        news_tasks = _filter_tasks(report.get("news_tasks", state.get("news_tasks", [])))
+
+        # --- DEBUG ---
+        print(f"\n[Coordinator] CoordinatorOutput produced:")
+        print(f"  mode       : {mode}")
+        print(f"  end_date   : {end_date}")
+        print(f"  strategy   : {strategy}")
+        print(f"  financial_tasks ({len(financial_tasks)}): {financial_tasks}")
+        print(f"  technical_tasks ({len(technical_tasks)}): {technical_tasks}")
+        print(f"  news_tasks  ({len(news_tasks)}): {news_tasks}")
 
         return {
             "messages": [result],

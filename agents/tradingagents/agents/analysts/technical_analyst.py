@@ -19,8 +19,9 @@ def create_technical_analyst(llm):
         def _tool_name(tool):
             return getattr(tool, "name", getattr(tool, "__name__", tool.__class__.__name__))
 
-        tools = [get_stock_data]
-        tool_names = ", ".join([_tool_name(tool) for tool in tools])
+        data_tools = [get_stock_data]
+        tools = data_tools + [TechnicalOutput]  # include output schema so LLM can terminate loop
+        tool_names = ", ".join([_tool_name(tool) for tool in data_tools])
 
         def _get_value(payload, key, default=""):
             if payload is None:
@@ -30,22 +31,44 @@ def create_technical_analyst(llm):
             return getattr(payload, key, default)
 
         task_payload = state.get("technical_task")
-        if task_payload is None:
+        task_payloads = []
+        if task_payload is not None:
+            task_payloads = [task_payload]
+        else:
             technical_tasks = state.get("technical_tasks") or []
-            if isinstance(technical_tasks, list) and technical_tasks:
-                task_payload = technical_tasks[0]
+            if isinstance(technical_tasks, list):
+                task_payloads = technical_tasks
             elif isinstance(technical_tasks, dict):
-                task_payload = technical_tasks.get("task")
+                task_payloads = [technical_tasks]
 
-        symbol = _get_value(task_payload, "symbol", "")
-        task_type = _get_value(task_payload, "task_type", "")
-        buy_reason = _get_value(task_payload, "buy_reason", "")
-        task = _get_value(task_payload, "task", "")
+        symbols = [str(_get_value(task, "symbol", "")) for task in task_payloads if _get_value(task, "symbol", "")]
+        task_types = [str(_get_value(task, "task_type", "")) for task in task_payloads if _get_value(task, "task_type", "")]
+        task_descriptions = [str(_get_value(task, "task", "")) for task in task_payloads if _get_value(task, "task", "")]
+        buy_reasons = [str(_get_value(task, "buy_reason", "")) for task in task_payloads if _get_value(task, "buy_reason", "")]
+
+        symbol = ", ".join(symbols)
+        task_type = ", ".join(task_types)
+        task = "\n".join([f"- {description}" for description in task_descriptions])
+        buy_reason = "\n".join([f"- {reason}" for reason in buy_reasons])
+
+        # --- DEBUG ---
+        print(f"\n[Technical Analyst] received {len(task_payloads)} task(s)")
+        print(f"  symbols   : {symbols}")
+        print(f"  task_type : {task_type}")
+        for _i, _t in enumerate(task_payloads):
+            print(f"  task[{_i}]  : {_t}")
+        print(f"  technical_messages so far: {len(state.get('technical_messages', []))}")
+
+        if not symbols:
+            print("[Technical Analyst] No valid symbols — skipping.")
+            return {}
 
         prompt = f"""你是一位技術分析師，負責分析{symbol}的價格、成交量與技術指標，並進一步判讀未來的走勢。\n
 
         你的任務為 {task}\n
         你可以使用下列工具取得額外資訊: {tool_names}\n
+        你只能查詢以下股票代號的資料：{symbol}。
+        絕對禁止查詢任何未在上方列出的股票代號（例如 2330、UNKNOWN 或其他任何代號）。若工具呼叫的 symbol 參數不在 [{symbol}] 清單內，視為違規，請立即停止並改用正確代號。\n
         任務指引: task_type 為 {task_type}。若 `task_type` 是 VERIFICATION，代表這是庫存股，你必須先驗證 上其購買理由({buy_reason}) 有沒有符合預期，並偵測盲點，確認沒有忽略其他狀況，再分析未來並決定是否繼續持有或加碼減碼。\n
 在分析{symbol}的技術面時，請務必從以下幾個層面進行全面的評估：
 1. 趨勢與價位分析: 判斷目前股價處於長期、中期、短期分別處於何種趨勢（上升、下降、或盤整），並指出圖表上關鍵的「支撐」與「壓力」區間
@@ -63,17 +86,21 @@ def create_technical_analyst(llm):
 - strong_sell: 長、中、短期趨勢皆為空頭，且 RSI 無底部背離，成交量配合價跌
 """
 
-        llm_with_tools = llm.bind_tools(tools)
+        try:
+            llm_with_tools = llm.bind_tools(tools, tool_choice="any")
+        except Exception:
+            llm_with_tools = llm.bind_tools(tools)
 
-        messages = list(state.get("messages", []))
-        messages.append(HumanMessage(content=prompt))
+        messages = list(state.get("technical_messages", []))
+        if not messages:
+            messages = [HumanMessage(content=prompt)]
         result = llm_with_tools.invoke(messages)
 
         report = _extract_payload(result, TechnicalOutput.__name__)
         analysis_reports = report.get("technical_analysis_reports", [])
         verification_reports = report.get("technical_verification_reports", [])
 
-        output = {"messages": [result]}
+        output = {"technical_messages": [result]}
         if analysis_reports:
             output["technical_analysis_reports"] = analysis_reports
         if verification_reports:
