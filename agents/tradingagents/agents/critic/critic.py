@@ -42,8 +42,9 @@ News Analyst 的驗證報告: {news_verification}\n
 
         reflection = ""
 
-        if len(result.tool_calls) == 0:
-            reflection = result.contents
+        tool_calls = getattr(result, "tool_calls", None) or []
+        if len(tool_calls) == 0:
+            reflection = getattr(result, "content", "") or ""
 
         return {"critic_reflection": reflection}
 

@@ -8,14 +8,29 @@ def create_technical_analyst(llm):
         tools = [get_stock_data]
         tool_names = ", ".join([tool.name for tool in tools])
 
-        task = state["technical_tasks"]["task"]
-        symbol = task["symbol"]
-        task_type = task["task_type"]
-        buy_reason = task["buy_reason"]
-        task = task["task"]
+        def _get_value(payload, key, default=""):
+            if payload is None:
+                return default
+            if isinstance(payload, dict):
+                return payload.get(key, default)
+            return getattr(payload, key, default)
+
+        task_payload = state.get("technical_task")
+        if task_payload is None:
+            technical_tasks = state.get("technical_tasks") or []
+            if isinstance(technical_tasks, list) and technical_tasks:
+                task_payload = technical_tasks[0]
+            elif isinstance(technical_tasks, dict):
+                task_payload = technical_tasks.get("task")
+
+        symbol = _get_value(task_payload, "symbol", "")
+        task_type = _get_value(task_payload, "task_type", "")
+        buy_reason = _get_value(task_payload, "buy_reason", "")
+        task = _get_value(task_payload, "task", "")
 
         prompt = f"""你是一位技術分析師，負責分析{symbol}的價格、成交量與技術指標，並進一步判讀未來的走勢。\n
 
+        你的任務為 {task}\n
         你可以使用下列工具取得額外資訊: {tool_names}\n
         任務指引: task_type 為 {task_type}。若 `task_type` 是 VERIFICATION，代表這是庫存股，你必須先驗證 上其購買理由({buy_reason}) 有沒有符合預期，並偵測盲點，確認沒有忽略其他狀況，再分析未來並決定是否繼續持有或加碼減碼。\n
 在分析{symbol}的技術面時，請務必從以下幾個層面進行全面的評估：
@@ -34,17 +49,15 @@ def create_technical_analyst(llm):
 - strong_sell: 長、中、短期趨勢皆為空頭，且 RSI 無底部背離，成交量配合價跌
 """
 
-        structured_llm = llm.with_structured_output(TechnicalOutput)
-        structured_llm_with_tools = structured_llm.bind_tools(tools)
+        try:
+            llm_for_chain = llm.bind_tools(tools).with_structured_output(TechnicalOutput)
+        except Exception:
+            llm_for_chain = llm.with_structured_output(TechnicalOutput)
 
-        result = structured_llm_with_tools.invoke(prompt)
+        result = llm_for_chain.invoke(prompt)
 
-        analysis_reports = None
-        verification_reports = None
-
-        if len(result.tool_calls) == 0:
-            analysis_reports = result.technical_analysis_reports
-            verification_reports = result.technical_verification_reports
+        analysis_reports = getattr(result, "technical_analysis_reports", None)
+        verification_reports = getattr(result, "technical_verification_reports", None)
 
         if analysis_reports is not None:
             return {"technical_analysis_reports": analysis_reports}

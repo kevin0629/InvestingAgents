@@ -2,10 +2,10 @@ from pydantic import BaseModel, Field
 from typing import List, Literal
 
 class Task(BaseModel):
-    symbol: str = Field(None, description="The stock symbol related to this task")
+    symbol: str = Field(None, description="The stock symbol related to this task (e.g., 2330 for TSMC)")
     task_type: Literal["ANALYSIS", "VERIFICATION"] = Field(None, description="Type of the technical task")
     task: str = Field(None, description="Detailed description of the task")
-    buy_reason: str = Field(None, description="The reason for recommending a buy action, if applicable")
+    buy_reason: str = Field(None, description="The reason for recommending a buy action, if task_type is VERIFICATION else None")
 
 class CoordinatorOutput(BaseModel):
     user_query: str = Field(None, description="The original user query that initiated the analysis and trading process")

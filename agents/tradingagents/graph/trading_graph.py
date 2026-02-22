@@ -42,7 +42,6 @@ class TradingAgentsGraph:
 
     def __init__(
         self,
-        selected_analysts=None,
         debug: bool = False,
         config: Optional[Dict[str, Any]] = None,
         callbacks: Optional[List] = None,
@@ -60,10 +59,10 @@ class TradingAgentsGraph:
 
         set_config(self.config)
 
-        os.makedirs(
-            os.path.join(self.config["project_dir"], "dataflows/data_cache"),
-            exist_ok=True,
-        )
+        # os.makedirs(
+        #     os.path.join(self.config["project_dir"], "dataflows/data_cache"),
+        #     exist_ok=True,
+        # )
 
         llm_kwargs = self._get_provider_kwargs()
         if self.callbacks:
@@ -93,7 +92,7 @@ class TradingAgentsGraph:
         )
         self.propagator = Propagator(max_recur_limit=self.config.get("max_recur_limit", 100))
 
-        self.graph = self.graph_setup.setup_graph(selected_analysts)
+        self.graph = self.graph_setup.setup_graph()
         self.curr_state = None
         self.ticker = None
         self.log_states_dict = {}

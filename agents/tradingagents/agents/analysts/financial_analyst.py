@@ -27,14 +27,28 @@ def create_financial_analyst(llm):
         ]
         tool_names = ", ".join([tool.name for tool in tools])
 
-        task = state["financial_tasks"]["task"]
-        symbol = task["symbol"]
-        task_type = task["task_type"]
-        buy_reason = task["buy_reason"]
-        task = task["task"]
+        def _get_value(payload, key, default=""):
+            if payload is None:
+                return default
+            if isinstance(payload, dict):
+                return payload.get(key, default)
+            return getattr(payload, key, default)
+
+        task_payload = state.get("financial_task")
+        if task_payload is None:
+            financial_tasks = state.get("financial_tasks") or []
+            if isinstance(financial_tasks, list) and financial_tasks:
+                task_payload = financial_tasks[0]
+            elif isinstance(financial_tasks, dict):
+                task_payload = financial_tasks.get("task")
+
+        symbol = _get_value(task_payload, "symbol", "")
+        task_type = _get_value(task_payload, "task_type", "")
+        buy_reason = _get_value(task_payload, "buy_reason", "")
+        task = _get_value(task_payload, "task", "")
 
         prompt = f"""你是一位財務分析師，負責評估{symbol}股價是被低估還是被高估，並分析未來公司股價上升的可能性。\n
-
+        你的任務為 {task}\n
         你可以使用下列工具取得額外資訊: {tool_names}\n
         Step1: task_type 為 {task_type}。若 `task_type` 是 VERIFICATION，代表這是庫存股，你必須先驗證{buy_reason}有沒有符合預期，並偵測盲點，確認沒有忽略其他狀況，再分析未來並決定是否繼續持有。\n
 判斷標準範例: 
@@ -68,17 +82,15 @@ Step2: 三大報表分析、財務指標分析、杜邦分析、河流圖分析�
 - strong_sell: 觀望。嚴重脫離基本面，且出現財務警訊 (如現金流轉負)。
 """
 
-        structured_llm = llm.with_structured_output(FinancialOutput)
-        structured_llm_with_tools = structured_llm.bind_tools(tools)
+        try:
+            llm_for_chain = llm.bind_tools(tools).with_structured_output(FinancialOutput)
+        except Exception:
+            llm_for_chain = llm.with_structured_output(FinancialOutput)
 
-        result = structured_llm_with_tools.invoke(prompt)
+        result = llm_for_chain.invoke(prompt)
 
-        analysis_reports = None
-        verification_reports = None
-
-        if len(result.tool_calls) == 0:
-            analysis_reports = result.financial_analysis_reports
-            verification_reports = result.financial_verification_reports
+        analysis_reports = getattr(result, "financial_analysis_reports", None)
+        verification_reports = getattr(result, "financial_verification_reports", None)
 
         if analysis_reports is not None:
             return {"financial_analysis_reports": analysis_reports}

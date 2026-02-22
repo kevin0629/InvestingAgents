@@ -11,14 +11,29 @@ def create_news_analyst(llm):
         ]
         tool_names = ", ".join([tool.name for tool in tools])
 
-        task = state["news_tasks"]["task"]
-        symbol = task["symbol"]
-        task_type = task["task_type"]
-        buy_reason = task["buy_reason"]
-        task = task["task"]
+        def _get_value(payload, key, default=""):
+          if payload is None:
+            return default
+          if isinstance(payload, dict):
+            return payload.get(key, default)
+          return getattr(payload, key, default)
+
+        task_payload = state.get("news_task")
+        if task_payload is None:
+          news_tasks = state.get("news_tasks") or []
+          if isinstance(news_tasks, list) and news_tasks:
+            task_payload = news_tasks[0]
+          elif isinstance(news_tasks, dict):
+            task_payload = news_tasks.get("task")
+
+        symbol = _get_value(task_payload, "symbol", "")
+        task_type = _get_value(task_payload, "task_type", "")
+        buy_reason = _get_value(task_payload, "buy_reason", "")
+        task = _get_value(task_payload, "task", "")
 
         prompt = f"""你是一位新聞分析師。你的專長是從紛雜的新聞資訊中，提煉出對{symbol}股價有實質影響的催化劑。你負責分析非結構化的文字資訊（擴廠、新產能、新技術、新產品、產業趨勢、供應鏈等），並將其轉化為對未來股價的影響力評估。\n
 
+        你的任務為 {task}\n
         你可以使用下列工具取得額外資訊: {tool_names}\n
         任務指引: task_type 為 {task_type}。若 `task_type` 是 VERIFICATION，代表這是庫存股，你必須先驗證 上其購買理由({buy_reason}) 有沒有符合預期，並偵測盲點，確認沒有忽略其他狀況，再分析未來並決定是否繼續持有或加碼減碼。\n
 在執行分析前，你必須先獲得公司相關資料再構思搜尋關鍵字：
@@ -51,17 +66,15 @@ def create_news_analyst(llm):
 - strong_sell: 溢價收購或無助核心競爭力的行為，不利股東，建議避開
 """
 
-        structured_llm = llm.with_structured_output(NewsOutput)
-        structured_llm_with_tools = structured_llm.bind_tools(tools)
+        try:
+            llm_for_chain = llm.bind_tools(tools).with_structured_output(NewsOutput)
+        except Exception:
+            llm_for_chain = llm.with_structured_output(NewsOutput)
 
-        result = structured_llm_with_tools.invoke(prompt)
+        result = llm_for_chain.invoke(prompt)
 
-        analysis_reports = None
-        verification_reports = None
-
-        if len(result.tool_calls) == 0:
-            analysis_reports = result.news_analysis_reports
-            verification_reports = result.news_verification_reports
+        analysis_reports = getattr(result, "news_analysis_reports", None)
+        verification_reports = getattr(result, "news_verification_reports", None)
 
         if analysis_reports is not None:
             return {"news_analysis_reports": analysis_reports}

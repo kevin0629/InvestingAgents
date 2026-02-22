@@ -1,6 +1,7 @@
 # TradingAgents/graph/propagation.py
 
 from typing import Dict, Any, List, Optional
+from langchain_core.messages import HumanMessage
 
 
 class Propagator:
@@ -13,12 +14,34 @@ class Propagator:
     def create_initial_state(self, user_request: str) -> Dict[str, Any]:
         """Create the initial state for the agent graph."""
         return {
+            # MessagesState
+            "messages": [HumanMessage(content=user_request)],
+
+            # AgentState-aligned fields
+            "user_query": "",
+            "mode": "",
+            "market_situation": "",
+            "end_time": "",
+            "strategy": "",
+            "technical_tasks": [],
+            "financial_tasks": [],
+            "news_tasks": [],
+            "financial_analysis_reports": [],
+            "financial_verification_reports": [],
+            "technical_analysis_reports": [],
+            "technical_verification_reports": [],
+            "news_analysis_reports": [],
+            "news_verification_reports": [],
+            "critic_reflections": [],
+
+            "portfolio_decisions": [],
+
+            # Backward-compatible legacy fields
             "user_request": user_request,
             "coordinator_plan": {},
             "financial_reports": [],
             "technical_reports": [],
             "news_reports": [],
-            "critic_reflections": [],
             "portfolio_decision": {},
             "technical_report": "",
             "fundamental_report": "",

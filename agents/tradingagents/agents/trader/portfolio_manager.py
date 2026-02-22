@@ -39,15 +39,14 @@ def create_portfolio_manager(llm):
 3. 部位管理: 根據最終信心分數 (0-10) 決定動作，Score > 8: Aggressive Buy (建倉/加碼 10-15% 權重)，Score 7: Buy (建倉 5-8% 權重)，Score 5~6: Hold (觀望/續抱)。Score < 5: Sell (減碼/清倉)
 """
 
-        structured_llm = llm.with_structured_output(PortfolioDecisions)
-        structured_llm_with_tools = structured_llm.bind_tools(tools)
+        try:
+            llm_for_chain = llm.bind_tools(tools).with_structured_output(PortfolioDecisions)
+        except Exception:
+            llm_for_chain = llm.with_structured_output(PortfolioDecisions)
 
-        result = structured_llm_with_tools.invoke(prompt)
+        result = llm_for_chain.invoke(prompt)
 
-        portfolio_decisions = None
-
-        if len(result.tool_calls) == 0:
-            portfolio_decisions = result.portfolio_decisions
+        portfolio_decisions = getattr(result, "portfolio_decisions", None)
 
         return {"portfolio_decisions": portfolio_decisions}
 
