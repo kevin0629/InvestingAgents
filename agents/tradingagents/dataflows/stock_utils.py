@@ -5,7 +5,10 @@ import matplotlib.pyplot as plt
 from .utils import get_backend_base_url
 
 
-def get_taiex_chart(end_date: Optional[str] = None) -> bytes:
+def get_taiex_chart(
+    end_date: Optional[str] = None,
+    timeframe: str = "D"
+) -> bytes:
     """
     獲取台灣加權指數 K 線圖 (包含成交量與移動平均線)
     
@@ -21,7 +24,7 @@ def get_taiex_chart(end_date: Optional[str] = None) -> bytes:
     base_url = get_backend_base_url()
     url = f"{base_url}/stock/taiex/chart"
     
-    params = {}
+    params = {"timeframe": timeframe}
     if end_date:
         params["end_date"] = end_date
     

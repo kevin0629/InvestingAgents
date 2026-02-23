@@ -43,7 +43,7 @@ def get_tavily_client() -> Any:
 
 def search_news(
     query: str,
-    search_depth: Literal["basic", "advanced", "fast", "ultra-fast"] = "advanced",
+    search_depth: Literal["basic", "advanced", "fast", "ultra-fast"] = "basic",
     max_results: int = 5,
     end_date: Optional[str] = None,
     min_score: float = MIN_SCORE_THRESHOLD,
@@ -53,7 +53,7 @@ def search_news(
     
     Args:
         query: 搜尋關鍵字，例如 "輝達 2330 擴廠"
-        search_depth: 搜尋深度，預設 "advanced" 以提高相關性
+        search_depth: 搜尋深度，預設 "basic"
         max_results: 最多返回結果數，預設 5
         end_date: 指定搜尋的結束日期 (YYYY-MM-DD format)，None 表示不限制
         min_score: 返回結果的最低相關性分數，鄠於此分數的結果將被過濃
@@ -109,7 +109,7 @@ def search_news_for_agent(
     """Return Tavily news search results in an LLM-friendly markdown string."""
     response = search_news(
         query=query,
-        search_depth="advanced",
+        search_depth="basic",
         max_results=max_results,
         end_date=end_date,
         min_score=min_score,

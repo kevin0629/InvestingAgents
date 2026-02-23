@@ -23,6 +23,8 @@ class StockService:
         self.company_symbol = company_symbol
         self.end_date = end_date
         self.colors  = {
+        'MA5': '#1f77b4',
+        'MA10': '#ff7f0e',
         'MA20': "#d5e219",
         'MA60': '#2ca02c',
         'MA240': '#ac2f2f',
@@ -52,7 +54,7 @@ class StockService:
                 x_pos, y_pos, text, 
                 color=item['color'], 
                 transform=ax.transAxes, 
-                fontsize=11, 
+                fontsize=10, 
                 fontweight='bold',
                 verticalalignment='bottom'
             )
@@ -60,7 +62,7 @@ class StockService:
             # 這裡用一個簡單的估算來移動 x_pos，避免文字重疊
             # 在 transAxes 中，0.1 大約是寬度的 10%。根據字串長度動態調整
             # 每個字元大約佔 0.008 (這取決於字型大小和圖表寬度，可能需要微調)
-            char_width_approx = 0.005
+            char_width_approx = 0.0045
             x_pos += len(text) * char_width_approx
 
     def get_stock_chart(self, params: StockChartQueryParams) -> io.BytesIO:
@@ -346,7 +348,7 @@ class StockService:
         buf.seek(0)
         return buf
     
-    def get_taiex_chart(self, end_date: Optional[str] = None) -> io.BytesIO:
+    def get_taiex_chart(self, params: StockChartQueryParams) -> io.BytesIO:
         """
         Generate taiex chart using mplfinance
         """
@@ -359,7 +361,34 @@ class StockService:
 
         # Ensure index is Datetime
         df.index = pd.to_datetime(df.index)
-        df = df.sort_index()
+        df = df.sort_index()        
+
+        if params.timeframe in ["W", "M"]:
+            try:
+                agg_logic = {
+                    'open': 'first',
+                    'high': 'max',
+                    'low': 'min',
+                    'close': 'last',
+                    'volume': 'sum'
+                }
+                # Only use columns that exist
+                active_agg = {k: v for k, v in agg_logic.items() if k in df.columns}
+                
+                # Resample
+                df = df.resample(params.timeframe).agg(active_agg)
+                
+                # Filter out empty bins (where Close is NaN)
+                if 'close' in df.columns:
+                    df = df.dropna(subset=['close'])
+                else:
+                    df = df.dropna(how='all')
+                    
+            except Exception as e:
+                # Add debugging context to the error
+                error_msg = f"Resample failed. Shape: {df.shape}, Dtypes: {df.dtypes.to_dict()}. Error: {str(e)}"
+                print(error_msg) # Print to server logs
+                raise RuntimeError(error_msg)
 
         # Rename columns for mplfinance / calculation
         df = df.rename(columns={
@@ -372,19 +401,20 @@ class StockService:
 
         if "Close" not in df.columns:
              raise ValueError("Data missing 'close' price column")
-
         # 2. Calculate Indicators using TALib (On Full Data)
         close = df["Close"].values
         
         # Panel 0: MAs
+        df["MA5"] = talib.SMA(close, timeperiod=5)
+        df["MA10"] = talib.SMA(close, timeperiod=10)
         df["MA20"] = talib.SMA(close, timeperiod=20)
         df["MA60"] = talib.SMA(close, timeperiod=60)
         df["MA240"] = talib.SMA(close, timeperiod=240)
 
         # 3. Filter Date Range for Display
         # Determine strict end date
-        if end_date:
-            display_end = pd.to_datetime(end_date).date()
+        if params.end_date:
+            display_end = pd.to_datetime(params.end_date).date()
         elif self.end_date:
             display_end = pd.to_datetime(self.end_date).date()
         else:
@@ -410,6 +440,8 @@ class StockService:
 
         # -- Panel 0: Main Chart Indicators --
         # MAs
+        apds.append(mpf.make_addplot(df_display['MA5'], panel=idx_main, color=self.colors['MA5'], width=1.0))
+        apds.append(mpf.make_addplot(df_display['MA10'], panel=idx_main, color=self.colors['MA10'], width=1.0))
         apds.append(mpf.make_addplot(df_display['MA20'], panel=idx_main, color=self.colors['MA20'], width=1.0))
         apds.append(mpf.make_addplot(df_display['MA60'], panel=idx_main, color=self.colors['MA60'], width=1.0))
         apds.append(mpf.make_addplot(df_display['MA240'], panel=idx_main, color=self.colors['MA240'], width=1.0))
@@ -457,6 +489,8 @@ class StockService:
             last_idx = -1 
             
             main_labels = [
+                {'label': 'SMA5', 'value': df_display['MA5'].iloc[last_idx], 'color': self.colors['MA5']},
+                {'label': 'SMA10', 'value': df_display['MA10'].iloc[last_idx], 'color': self.colors['MA10']},
                 {'label': 'SMA20', 'value': df_display['MA20'].iloc[last_idx], 'color': self.colors['MA20']},
                 {'label': 'SMA60', 'value': df_display['MA60'].iloc[last_idx], 'color': self.colors['MA60']},
                 {'label': 'SMA240', 'value': df_display['MA240'].iloc[last_idx], 'color': self.colors['MA240']},

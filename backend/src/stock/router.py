@@ -10,15 +10,15 @@ router = APIRouter(prefix="/stock", tags=["stock"])
 
 @router.get("/taiex/chart", responses={200: {"content": {"image/png": {}}}})
 async def get_taiex_chart(
-    end_date: Optional[str] = None, 
+    params: StockChartQueryParams = Depends()
 ):
     """
     獲取台灣加權指數 K 線圖 (包含成交量與移動平均線)
     """
     try:
         data = get_data_instance()
-        service = StockService(data, "TAIEX", end_date)
-        image_buf = service.get_taiex_chart(end_date=end_date)
+        service = StockService(data, "TAIEX", params.end_date)
+        image_buf = service.get_taiex_chart(params)
         return StreamingResponse(image_buf, media_type="image/png")
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

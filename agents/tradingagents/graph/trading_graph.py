@@ -159,7 +159,7 @@ class TradingAgentsGraph:
             ),
             "fundamental": ToolNode(
                 [
-                    # Fundamental analysis tools
+                    # Financial analysis tools
                     get_company_info,
                     get_balance_sheet,
                     get_cashflow,
