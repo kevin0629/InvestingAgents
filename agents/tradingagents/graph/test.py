@@ -367,14 +367,12 @@ class PMOutput(BaseModel):
     decisions: List[PortfolioDecision]
 
 def _portfolio_llm_node(state: PortfolioSubgraphState):
-    msgs = state.get("messages") or []
-    if not msgs:
-        critic_summary = "\n".join(state.get("critic_reflections") or [])
-        msgs = [HumanMessage(content=(
-            "你是基金經理人。請根據 Critic 的反思與使用者原始需求，"
-            "決定最終的交易動作與資金權重。\n"
-            f"使用者需求: {state['user_query']}\nCritic建議: {critic_summary}"
-        ))]
+    critic_summary = "\n".join(state.get("critic_reflections") or [])
+    msgs = [HumanMessage(content=(
+        "你是基金經理人。請根據 Critic 的反思與使用者原始需求，"
+        "決定最終的交易動作與資金權重。\n"
+        f"使用者需求: {state['user_query']}\nCritic建議: {critic_summary}"
+    ))]
     return {"messages": [llm.invoke(msgs)]}
 
 def _portfolio_format_node(state: PortfolioSubgraphState):
