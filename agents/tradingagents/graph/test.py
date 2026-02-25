@@ -3,6 +3,7 @@ import operator
 from typing import Annotated, List, Literal
 from typing_extensions import TypedDict
 from pydantic import BaseModel, Field
+from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import AnyMessage, HumanMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate
@@ -27,12 +28,11 @@ from tradingagents.agents.utils.agent_utils import (
     # store_reflection,
     # retrieve_reflections,
 )
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass  # langgraph dev loads .env automatically via langgraph.json
+from tradingagents.agents.utils.agent_output_formats import *
+from tradingagents.agents.utils.agent_states import *
 
+
+load_dotenv()  # Load environment variables from .env file
 llm = ChatOpenAI(model="gpt-5-mini", temperature=0)
 
 
@@ -88,146 +88,6 @@ def _handle_image_tool_results(state):
 
     return {"messages": updates} if updates else {}
 
-# ==========================================
-# 1. Pydantic Models & State 定義 (簡化版，對齊你的設計)
-# ==========================================
-
-class Task(BaseModel):
-    symbol: str = Field(None, description="The stock symbol related to this task, must be integer string like '2330', '2455', '3491'")
-    task_type: Literal["ANALYSIS", "VERIFICATION"] = Field(None, description="Type of the technical task")
-    task: str = Field(None, description="Detailed description of the task")
-    buy_reason: str = Field(None, description="The reason for recommending a buy action, if task_type is VERIFICATION else None")
-
-class CoordinatorOutput(BaseModel):
-    """Respond to the user with this"""
-    user_query: str = Field(None, description="The original user query that initiated the analysis and trading process")
-    mode: Literal["query", "strategy"] = Field(None, description="Operation mode: query or strategy")
-    market_situation: str = Field(None, description="Summary of the current market situation.")
-    end_date: str = Field(None, description="The end date for the data retrieval, analysis and trading decision.")
-    
-    strategy: str = Field(None, description="The investment strategy to follow, e.g. monthly_revenue_growth_roe.")
-
-    technical_tasks: List[Task] = Field(None, description="The coordinator's detailed plan for technical analysis.")
-    financial_tasks: List[Task] = Field(None, description="The coordinator's detailed plan for financial analysis.")
-    news_tasks: List[Task] = Field(None, description="The coordinator's detailed plan for news analysis.")
-
-
-
-class FinancialAnalysisReport(BaseModel):
-    symbol: str = Field(None, description="The stock symbol related to this financial analysis report")
-    signal: Literal["strong_buy", "buy", "neutral", "sell", "strong_sell"] = Field(None, description="Investment recommendation based on the financial analysis")
-    confidence_score: int = Field(None, description="Confidence score for the investment recommendation, ranging from 0 to 10")
-    report: str = Field(None, description="Detailed financial analysis report for the given stock symbol")
-
-class FinancialVerificationReport(BaseModel):
-    symbol: str = Field(None, description="The stock symbol related to this financial verification report")
-    signal: Literal["strong_buy", "buy", "neutral", "sell", "strong_sell"] = Field(None, description="Investment recommendation based on the financial analysis")
-    confidence_score: int = Field(None, description="Confidence score for the investment recommendation, ranging from 0 to 10")
-    buy_reason: str = Field(None, description="The reason for recommending a buy action, if applicable")
-    review_comment: str = Field(None, description="The financial analyst's reflection and review comment for the buy_reason")
-    report: str = Field(None, description="The result of the verification process for the given financial task")
-
-class FinancialOutput(BaseModel):
-    """Respond to the user with financial_analysis_reports when the task_type is ANALYSIS, or financial_verification_reports when the task_type is VERIFICATION"""
-    financial_analysis_reports: List[FinancialAnalysisReport] = Field(None, description="Financial analyst outputs for analysis")
-    financial_verification_reports: List[FinancialVerificationReport] = Field(None, description="Financial analyst reflections for verification")
-
-
-
-class NewsAnalysisReport(BaseModel):
-    symbol: str = Field(None, description="The stock symbol related to this news analysis report")
-    signal: Literal["strong_buy", "buy", "neutral", "sell", "strong_sell"] = Field(None, description="Investment recommendation based on the news analysis")
-    confidence_score: int = Field(None, description="Confidence score for the investment recommendation, ranging from 0 to 10")
-    report: str = Field(None, description="Detailed news analysis report for the given stock symbol")
-
-class NewsVerificationReport(BaseModel):
-    symbol: str = Field(None, description="The stock symbol related to this news verification report")
-    signal: Literal["strong_buy", "buy", "neutral", "sell", "strong_sell"] = Field(None, description="Investment recommendation based on the news analysis")
-    confidence_score: int = Field(None, description="Confidence score for the investment recommendation, ranging from 0 to 10")
-    buy_reason: str = Field(None, description="The reason for recommending a buy action, if applicable")
-    review_comment: str = Field(None, description="The news analyst's reflection and review comment for the buy_reason")
-    report: str = Field(None, description="The result of the verification process for the given news task")
-
-class NewsOutput(BaseModel):
-    """Respond to the user with news_analysis_reports when the task_type is ANALYSIS, or news_verification_reports when the task_type is VERIFICATION"""
-    news_analysis_reports: List[NewsAnalysisReport] = Field(None, description="News analyst outputs for analysis")
-    news_verification_reports: List[NewsVerificationReport] = Field(None, description="News analyst reflections for verification")
-
-
-class TechnicalAnalysisReport(BaseModel):
-    symbol: str = Field(None, description="The stock symbol related to this technical analysis report")
-    signal: Literal["strong_buy", "buy", "neutral", "sell", "strong_sell"] = Field(None, description="Investment recommendation based on the technical analysis")
-    confidence_score: int = Field(None, description="Confidence score for the investment recommendation, ranging from 0 to 10")
-    report: str = Field(None, description="Detailed technical analysis report for the given stock symbol")
-
-class TechnicalVerificationReport(BaseModel):
-    symbol: str = Field(None, description="The stock symbol related to this technical verification report")
-    signal: Literal["strong_buy", "buy", "neutral", "sell", "strong_sell"] = Field(None, description="Investment recommendation based on the technical analysis")
-    confidence_score: int = Field(None, description="Confidence score for the investment recommendation, ranging from 0 to 10")
-    buy_reason: str = Field(None, description="The reason for recommending a buy action, if applicable")
-    review_comment: str = Field(None, description="The technical analyst's reflection and review comment for the buy_reason")
-    report: str = Field(None, description="The result of the verification process for the given technical task")
-
-class TechnicalOutput(BaseModel):
-    """Respond to the user with technical_analysis_reports when the task_type is ANALYSIS, or technical_verification_reports when the task_type is VERIFICATION"""
-    technical_analysis_reports: List[TechnicalAnalysisReport] = Field(None, description="Technical analyst outputs for analysis")
-    technical_verification_reports: List[TechnicalVerificationReport] = Field(None, description="Technical analyst reflections for verification")
-
-
-class PortfolioDecision(BaseModel):
-    symbol: str = Field(None, description="The stock symbol related to this portfolio decision")
-    action: Literal["buy", "hold", "sell"] = Field(None, description="The trading action decided by the portfolio manager for the next trading day")
-    position: float = Field(None, description="The target position size for the given stock symbol, represented as a percentage of the total portfolio (e.g., 0.1 for 10%)")
-    confidence_score: int = Field(None, description="Confidence score for the trading action, ranging from 0 to 10")
-    rationale: str = Field(None, description="Detailed rationale behind the portfolio manager's trading decision for the given stock symbol")
-
-class PortfolioDecisions(BaseModel):
-    """Respond to the user with this"""
-    portfolio_decisions: List[PortfolioDecision] = Field(None, description="The portfolio manager's final trading decisions for the next trading day")
-
-
-
-class FinancialState(MessagesState):
-    task: Annotated[Task, "The specific task assigned to this financial analyst"]
-    financial_analysis_reports: Annotated[List[FinancialAnalysisReport], operator.add]
-    financial_verification_reports: Annotated[List[FinancialVerificationReport], operator.add]
-
-class TechnicalState(MessagesState):
-    task: Annotated[Task, "The specific task assigned to this technical analyst"]
-    technical_analysis_reports: Annotated[List[TechnicalAnalysisReport], operator.add]
-    technical_verification_reports: Annotated[List[TechnicalVerificationReport], operator.add]
-
-class NewsState(MessagesState):
-    task: Annotated[Task, "The specific task assigned to this news analyst"]
-    news_analysis_reports: Annotated[List[NewsAnalysisReport], operator.add]
-    news_verification_reports: Annotated[List[NewsVerificationReport], operator.add]
-
-class AgentState(MessagesState):
-    user_query: Annotated[str, "The original user query that initiated the analysis and trading process"]
-    mode: Annotated[str, "Operation mode: query or strategy"]
-    market_situation: Annotated[str, "Current market situation"]
-    end_date: Annotated[str, "End time for the data usage and trading decision"]
-
-    strategy: Annotated[str, "Investment strategy to follow, e.g. monthly_revenue_growth_roe"]
-
-    financial_messages: Annotated[List[AnyMessage], add_messages]
-    technical_messages: Annotated[List[AnyMessage], add_messages]
-    news_messages: Annotated[List[AnyMessage], add_messages]
-    portfolio_messages: Annotated[List[AnyMessage], add_messages]
-
-    technical_tasks: Annotated[List[Task], operator.add]
-    financial_tasks: Annotated[List[Task], operator.add]
-    news_tasks: Annotated[List[Task], operator.add]
-
-    financial_analysis_reports: Annotated[List[FinancialAnalysisReport], operator.add]
-    financial_verification_reports: Annotated[List[FinancialVerificationReport], operator.add]
-    technical_analysis_reports: Annotated[List[TechnicalAnalysisReport], operator.add]
-    technical_verification_reports: Annotated[List[TechnicalVerificationReport], operator.add]
-    news_analysis_reports: Annotated[List[NewsAnalysisReport], operator.add]
-    news_verification_reports: Annotated[List[NewsVerificationReport], operator.add]
-    
-    critic_reflections: Annotated[List[str], operator.add]
-    portfolio_decisions: Annotated[List[PortfolioDecision], operator.add]
 
 # Analyst 的 Sub-State (給 Send API 使用)
 class AnalystState(TypedDict):
@@ -464,18 +324,19 @@ class CriticSubgraphState(TypedDict):
 # _critic_llm = llm.bind_tools(_critic_tools)
 
 def _critic_llm_node(state: CriticSubgraphState):
-    msgs = state.get("messages") or []
-    if not msgs:
-        reports_summary = (
-            f"財務分析: {state.get('financial_analysis_reports')}\n"
-            f"技術分析: {state.get('technical_analysis_reports')}\n"
-            f"新聞分析: {state.get('news_analysis_reports')}"
-        )
-        msgs = [HumanMessage(content=(
-            "你是嚴格的風險控制員。請審視以下三部門報告，"
-            "找出潛在矛盾，並給出最終市場評估指引。可列用工具儲存重要反思。\n"
-            f"{reports_summary}"
-        ))]
+    # Always build a clean prompt from the structured reports only.
+    # Never use state["messages"] — it inherits the entire analyst history
+    # from AgentState and wastes huge amounts of tokens.
+    reports_summary = (
+        f"財務分析:\n{state.get('financial_analysis_reports')}\n\n"
+        f"技術分析:\n{state.get('technical_analysis_reports')}\n\n"
+        f"新聞分析:\n{state.get('news_analysis_reports')}"
+    )
+    msgs = [HumanMessage(content=(
+        "你是嚴格的風險控制員。請審視以下三部門報告，"
+        "找出潛在矛盾，並給出最終市場評估指引。\n\n"
+        f"{reports_summary}"
+    ))]
     return {"messages": [llm.invoke(msgs)]}
 
 def _critic_route(state: CriticSubgraphState):

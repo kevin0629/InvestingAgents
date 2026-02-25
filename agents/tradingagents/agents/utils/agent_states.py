@@ -47,5 +47,5 @@ class AgentState(MessagesState):
     news_verification_reports: Annotated[List[NewsVerificationReport], operator.add]
     
     critic_reflections: Annotated[List[str], operator.add]
-    portfolio_decisions: Annotated[List[PortfolioDecisions], operator.add]
+    portfolio_decisions: Annotated[List[PortfolioDecision], operator.add]
 
