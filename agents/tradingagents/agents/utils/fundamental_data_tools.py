@@ -24,7 +24,7 @@ def get_company_info(
     Returns:
         str: A formatted report containing company information
     """
-    return route_to_vendor("get_company_info", symbol)
+    return route_to_vendor("get_company_info", symbol, None)
 
 
 @tool

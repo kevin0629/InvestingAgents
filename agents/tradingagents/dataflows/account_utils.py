@@ -309,23 +309,24 @@ def update_stock_holding(strategy: str, signal_date: str) -> Dict[str, Any]:
 
         capital = old_bank_balance * position
         shares = (capital / close_price) if close_price > 0 else 0.0
-        cost_amount = shares * close_price
-        fee = cost_amount * 0.001425
-        tax = cost_amount * 0.003
+        shares = int(shares)
+        cost_amount = round(shares * close_price)
+        fee = int(cost_amount * 0.001425)
+        tax = int(cost_amount * 0.003)
         net = cost_amount - fee - tax
         pnl = net - cost_amount
         ret = (pnl / cost_amount * 100) if cost_amount else 0.0
 
-        holding_df.at[idx, "股數"] = round(shares, 4)
+        holding_df.at[idx, "股數"] = shares
         holding_df.at[idx, "均價"] = round(close_price, 4)
-        holding_df.at[idx, "成本金額"] = round(cost_amount, 2)
+        holding_df.at[idx, "成本金額"] = cost_amount
         holding_df.at[idx, "現價"] = round(close_price, 4)
-        holding_df.at[idx, "市值"] = round(cost_amount, 2)
-        holding_df.at[idx, "手續費"] = round(fee, 2)
-        holding_df.at[idx, "交易稅"] = round(tax, 2)
-        holding_df.at[idx, "預估淨收付"] = round(net, 2)
-        holding_df.at[idx, "預估損益"] = round(pnl, 2)
-        holding_df.at[idx, "報酬率"] = round(ret, 4)
+        holding_df.at[idx, "市值"] = cost_amount
+        holding_df.at[idx, "手續費"] = fee
+        holding_df.at[idx, "交易稅"] = tax
+        holding_df.at[idx, "預估淨收付"] = int(net)
+        holding_df.at[idx, "預估損益"] = int(pnl)
+        holding_df.at[idx, "報酬率"] = round(ret, 2)
         holding_df.at[idx, "訊號日期"] = next_day
 
         new_market_value_total += cost_amount

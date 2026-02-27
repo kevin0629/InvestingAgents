@@ -6,19 +6,31 @@ from langchain_core.messages import AnyMessage
 from .agent_output_formats import *
 
 
+class CoordinatorState(MessagesState):
+    user_query: str
+    mode: str
+    market_situation: str
+    end_date: str
+    strategy: str
+    financial_tasks: Annotated[List[Task], operator.add]
+    technical_tasks: Annotated[List[Task], operator.add]
+    news_tasks: Annotated[List[Task], operator.add]
 
 class FinancialState(MessagesState):
     task: Annotated[Task, "The specific task assigned to this financial analyst"]
+    end_date: str
     financial_analysis_reports: Annotated[List[FinancialAnalysisReport], operator.add]
     financial_verification_reports: Annotated[List[FinancialVerificationReport], operator.add]
 
 class TechnicalState(MessagesState):
     task: Annotated[Task, "The specific task assigned to this technical analyst"]
+    end_date: str
     technical_analysis_reports: Annotated[List[TechnicalAnalysisReport], operator.add]
     technical_verification_reports: Annotated[List[TechnicalVerificationReport], operator.add]
 
 class NewsState(MessagesState):
     task: Annotated[Task, "The specific task assigned to this news analyst"]
+    end_date: str
     news_analysis_reports: Annotated[List[NewsAnalysisReport], operator.add]
     news_verification_reports: Annotated[List[NewsVerificationReport], operator.add]
 
