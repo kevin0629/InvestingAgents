@@ -341,8 +341,10 @@ class StockService:
 
             # 儲存圖片
             fig.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+            plt.close(fig)
             
         except Exception as e:
+            plt.close('all')
             raise RuntimeError(f"Failed to generate chart: {str(e)}")
 
         buf.seek(0)
@@ -499,8 +501,10 @@ class StockService:
             self.add_header_labels(axes[0], main_labels)
 
             fig.savefig(buf, format='png', dpi=100, bbox_inches='tight')
-            
+            plt.close(fig)
+
         except Exception as e:
+            plt.close('all')
             raise RuntimeError(f"Failed to generate chart: {str(e)}")
 
         buf.seek(0)

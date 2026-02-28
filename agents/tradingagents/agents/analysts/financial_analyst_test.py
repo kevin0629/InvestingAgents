@@ -42,10 +42,10 @@ def create_financial_analyst(llm):
         return getattr(tool, "name", getattr(tool, "__name__", tool.__class__.__name__))
     
     tools = [
-        get_balance_sheet,
-        get_cashflow,
-        get_company_info,
-        get_dupont_analysis,
+        # get_balance_sheet,
+        # get_cashflow,
+        # get_company_info,
+        # get_dupont_analysis,
         get_factors,
         get_income_statement,
         get_monthly_revenue,
@@ -55,6 +55,8 @@ def create_financial_analyst(llm):
 
     def financial_analyst_node(state: FinancialState):
         task = state["task"]
+        if isinstance(task, dict):
+            task = Task(**task)
         end_date = state["end_date"]
 
         prompt = ChatPromptTemplate.from_messages(
@@ -63,6 +65,8 @@ def create_financial_analyst(llm):
                     "system",
                     "你是一位財務分析師，主要任務是{task}，次要任務要評估 {symbol} 股價是被低估還是被高估，並分析未來公司股價上升的可能性。\n"
                     "你可以使用的工具: {tool_names}\n"
+                    "請不要以重複的參數呼叫工具，這樣會導致不必要的資源浪費。\n"
+                    "你務必先使用 `get_company_info` 了解 {symbol} 的基本業務，再根據這些內容下去分析財報等資料。\n"
                     "本次分析截止日期為 {end_date}，所有工具呼叫的 end_date 參數皆必須設為 {end_date}（或更早），嚴禁使用截止日期以後的資料。\n"
                     "分析步驟:\n"
                     "Step1: task_type 為 {task_type}。若 `task_type` 是 VERIFICATION，代表這是庫存股，你必須先驗證 {buy_reason} 有沒有符合預期，並偵測盲點，確認沒有忽略其他狀況，再分析未來並決定是否繼續持有。\n"
@@ -90,10 +94,18 @@ def create_financial_analyst(llm):
                     "- neutral: 謹慎持有。市場已給予高期待。股價對財報容錯率低，建議關注成長率是否放緩，不宜大舉追高\n"
                     "- sell: 迴避/減碼。股價嚴重脫離基本面，風險極高，建議遠離或獲利了結\n"
                     "- strong_sell: 觀望。嚴重脫離基本面，且出現財務警訊 (如現金流轉負)\n"
+                    "完成分析後，請使用 FinancialOutput 工具輸出結構化結果。"
                 ),
                 MessagesPlaceholder(variable_name="messages"),
             ]
         )
+
+        print("Financial Analyst received task dict:", task)
+        print("Financial Analyst received end_date:", end_date)
+        print("Financial Analyst available task", task.task)
+        print("Financial Analyst available symbol", task.symbol)
+        print("Financial Analyst available task_type", task.task_type)
+        print("Financial Analyst available buy_reason", task.buy_reason)
 
         prompt = prompt.partial(
             task=task.task,
@@ -104,7 +116,7 @@ def create_financial_analyst(llm):
         )
         prompt = prompt.partial(tool_names=", ".join([_tool_name(tool) for tool in tools]))
 
-        chain = prompt | llm.bind_tools(tools, tool_choice="any")
+        chain = prompt | llm.bind_tools(tools)   # tool_choice="any" 時就無法同時使用會回傳圖片、文字的 tool，使用的話會導致 LLM 在看到末尾的 HumanMessage（攜帶圖片）後強制再呼叫工具而進入無限循環；
 
         return {"messages": [chain.invoke(state["messages"])]}
 

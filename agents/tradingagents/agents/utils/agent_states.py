@@ -6,6 +6,11 @@ from langchain_core.messages import AnyMessage
 from .agent_output_formats import *
 
 
+def _last_value(a, b):
+    """Reducer: 並行節點同時回寫同一欄位時，取最後一個非空值（值應相同）。"""
+    return b if b else a
+
+
 class CoordinatorState(MessagesState):
     user_query: str
     mode: str
@@ -38,7 +43,7 @@ class AgentState(MessagesState):
     user_query: Annotated[str, "The original user query that initiated the analysis and trading process"]
     mode: Annotated[str, "Operation mode: query or strategy"]
     market_situation: Annotated[str, "Current market situation"]
-    end_date: Annotated[str, "End time for the data usage and trading decision"]
+    end_date: Annotated[str, _last_value]
 
     strategy: Annotated[str, "Investment strategy to follow, e.g. monthly_revenue_growth_roe"]
 

@@ -22,7 +22,7 @@ _PREFERRED_DOMAINS: List[str] = [
 ]
 
 # Minimum Tavily relevance score — results below this are noise
-MIN_SCORE_THRESHOLD = 0.3
+MIN_SCORE_THRESHOLD = 0.7
 
 
 def get_tavily_api_key() -> str:
@@ -56,7 +56,7 @@ def search_news(
         search_depth: 搜尋深度，預設 "basic"
         max_results: 最多返回結果數，預設 5
         end_date: 指定搜尋的結束日期 (YYYY-MM-DD format)，None 表示不限制
-        min_score: 返回結果的最低相關性分數，鄠於此分數的結果將被過濃
+        min_score: 返回結果的最低相關性分數，低於此分數的結果將被過濾掉
     Returns:
         包含新聞搜尋結果的字典
     Raises:

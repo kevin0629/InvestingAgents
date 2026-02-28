@@ -21,7 +21,7 @@ class Propagator:
             "user_query": "",
             "mode": "",
             "market_situation": "",
-            "end_time": "",
+            "end_date": "",
             "strategy": "",
             "financial_messages": [],
             "technical_messages": [],

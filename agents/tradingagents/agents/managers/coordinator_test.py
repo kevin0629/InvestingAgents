@@ -48,10 +48,13 @@ def create_coordinator(llm):
                     "情境 A：單點查詢 - 使用者詢問關於特定公司的分析，或是當前市場狀況的分析。此時請協調員根據使用者的需求，制定一套分析計畫，並將任務分配給相應的專家。例如，如果使用者詢問某公司的基本面分析，協調員可能會分配任務給 Financial Analyst 來分析該公司的財務報表和基本面資訊；如果使用者詢問技術分析，則可能會分配任務給 Technical Analyst 來分析該公司的股價圖表和技術指標；如果使用者詢問新聞分析，則可能會分配任務給 News Analyst 來分析與該公司相關的新聞資訊。\n"
                     "情境 B：月度投資組合調整 - 使用者詢問關於某隻量化策略的優化，或是詢問投資組合調整建議。此時請協調員根據使用者的需求，制定一套分析計畫，並將任務分配給相應的專家，任務類型要設為 'ANALYSIS'。例如，如果使用者詢問某隻量化策略的優化，協調員可能會分配任務給 Technical Analyst 來分析投資組合中每隻股票的技術指標和趨勢；也會分配任務給 Financial Analyst 來分析投資組合中各個股票的基本面資訊，以及分配任務給 News Analyst 來分析與投資組合公司的新聞資訊。\n"
                     "- 不得分配大盤或ETF相關任務給專家，這部分應該盡你可能的去分析並提供給專家作為分析背景資訊，但不應該成為專家任務的核心。\n"
+                    "- 不必分派任務再去驗證策略篩選的條件是否正確，只需分配其他像任務給專家，讓他們去分析並提供建議。\n"
                     "- 若有要求某隻量化策略的優化，使用 `get_strategy` 查詢這隻策略的相關資訊,`get_backtest_report` 獲取量化策略的投資組合，任務類型設為 'ANALYSIS'；"
                     "對於所有問題，務必先使用 `get_taiex_data`, `search_news` 了解宏觀市場情況(不應該去搜尋個股新聞)，並將市場情況作為分析背景提供給專家。\n"
                     "一旦完成資料收集，你必須「立刻」呼叫 `CoordinatorOutput` 輸出結構化結果，嚴禁重複呼叫已有結果的工具"
-                    "你可以使用下列工具取得額外資訊: {tool_names}.\n",
+                    "你可以使用下列工具取得額外資訊: {tool_names}.\n"
+                    "請不要以重複的參數呼叫工具，這樣會導致不必要的資源浪費。\n"
+                    "完成分析後，請使用 CoordinatorOutput 工具輸出結構化結果。\n"
                 ),
                 MessagesPlaceholder(variable_name="messages"),
             ]
@@ -103,13 +106,13 @@ def create_coordinator(llm):
                 strategy = args.get("strategy", "")
 
                 # --- DEBUG ---
-                print(f"\n[Coordinator] CoordinatorOutput produced:")
-                print(f"  mode       : {mode}")
-                print(f"  end_date   : {end_date}")
-                print(f"  strategy   : {strategy}")
-                print(f"  financial_tasks ({len(financial_tasks)}): {financial_tasks}")
-                print(f"  technical_tasks ({len(technical_tasks)}): {technical_tasks}")
-                print(f"  news_tasks  ({len(news_tasks)}): {news_tasks}")
+                # print(f"\n[Coordinator] CoordinatorOutput produced:")
+                # print(f"  mode       : {mode}")
+                # print(f"  end_date   : {end_date}")
+                # print(f"  strategy   : {strategy}")
+                # print(f"  financial_tasks ({len(financial_tasks)}): {financial_tasks}")
+                # print(f"  technical_tasks ({len(technical_tasks)}): {technical_tasks}")
+                # print(f"  news_tasks  ({len(news_tasks)}): {news_tasks}")
 
                 return {
                     "mode":             mode,

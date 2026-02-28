@@ -30,12 +30,14 @@ def create_news_analyst(llm):
 
     tools = [
         get_company_info,
-        search_news,
+        # search_news,
         NewsOutput,
     ]
 
     def news_analyst_node(state: NewsState):
         task = state["task"]
+        if isinstance(task, dict):
+            task = Task(**task)
         end_date = state["end_date"]
         
         prompt = ChatPromptTemplate.from_messages(
@@ -50,6 +52,8 @@ def create_news_analyst(llm):
                     "所有工具呼叫的 end_date 參數皆必須設為 {end_date}，"
                     "絕對不得使用超過此日期的任何資料。\n\n"
                     "你可以使用下列工具: {tool_names}\n\n"
+                    "請不要以重複的參數呼叫工具，這樣會導致不必要的資源浪費。\n"
+                    "你務必先使用 `get_company_info` 了解 {symbol} 的基本業務，再根據這些內容下去查相關資料。\n"
                     "每次呼叫 search_news 的 query 格式：「{symbol} + 具體業務關鍵字」。\n"
                     "例如：「{symbol} 擴廠計畫」、「{symbol} 新客戶訂單」、"
                     "「{symbol} 供應鏈缺貨」、「{symbol} 併購案」。\n\n"
@@ -74,6 +78,13 @@ def create_news_analyst(llm):
             ]
         )
 
+        print("News Analyst received task dict:", task)
+        print("News Analyst received end_date:", end_date)
+        print("News Analyst available task", task.task)
+        print("News Analyst available symbol", task.symbol)
+        print("News Analyst available task_type", task.task_type)
+        print("News Analyst available buy_reason", task.buy_reason)
+
         prompt = prompt.partial(
             task=task.task,
             symbol=task.symbol,
@@ -83,7 +94,7 @@ def create_news_analyst(llm):
         )
         prompt = prompt.partial(tool_names=", ".join([_tool_name(tool) for tool in tools]))
 
-        chain = prompt | llm.bind_tools(tools, tool_choice="any")
+        chain = prompt | llm.bind_tools(tools, tool_choice="any") # tool_choice="any" 時就無法同時使用會回傳圖片、文字的 tool，使用的話會導致 LLM 在看到末尾的 HumanMessage（攜帶圖片）後強制再呼叫工具而進入無限循環；
 
         return {"messages": [chain.invoke(state["messages"])]}
 
