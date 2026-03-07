@@ -102,23 +102,21 @@ def search_news(
 
 def search_news_for_agent(
     query: str,
-    max_results: int = 5,
     end_date: Optional[str] = None,
-    min_score: float = MIN_SCORE_THRESHOLD,
 ) -> str:
     """Return Tavily news search results in an LLM-friendly markdown string."""
     response = search_news(
         query=query,
         search_depth="basic",
-        max_results=max_results,
+        max_results=5,
         end_date=end_date,
-        min_score=min_score,
+        min_score=MIN_SCORE_THRESHOLD,
     )
 
     results = response.get("results", [])
     if not results:
         return (
-            f"查詢「{query}」未找到相關性足夠高的新聞結果（最低分數門檻: {min_score}）。"
+            f"查詢「{query}」未找到相關性足夠高的新聞結果（最低分數門檻: {MIN_SCORE_THRESHOLD}）。"
             f"建議改用更具體的中文關鍵字並包含股票代號或公司名稱。"
         )
 

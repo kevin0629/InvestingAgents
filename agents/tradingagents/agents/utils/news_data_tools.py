@@ -5,7 +5,6 @@ from tradingagents.dataflows.interface import route_to_vendor
 @tool
 def search_news(
     query: Annotated[str, "必須以股票代號或公司名稱開頭的繁體中文搜尋關鍵字。格式：'<代號或公司> <具體業務事件>'。例如：'1436 華友聯 擴廠產能 2025'、'2724 藝舫 KY 新訂單'、'1436 華友聯 月營收 成長趨勢'。禁止使用與目標公司無關的泛用詞彙作為獨立 query。"],
-    max_results: Annotated[int, "最大返回結果數"] = 5,
     end_date: Annotated[str, "可選的結束日期，格式 yyyy-mm-dd"] = None,
 ) -> str:
     """
@@ -15,9 +14,8 @@ def search_news(
 
     Args:
         query (str): 繁體中文搜尋關鍵字，必須以股票代號或公司名稱開頭
-        max_results (int): 返回結果數
         end_date (str): 可選的結束日期
     Returns:
         str: 包含新聞搜尋結果的格式化字串
     """
-    return route_to_vendor("search_news", query, max_results, end_date)
+    return route_to_vendor("search_news", query, end_date)

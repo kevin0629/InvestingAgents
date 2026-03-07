@@ -85,6 +85,8 @@ class TechnicalOutput(BaseModel):
 
 class PortfolioDecision(BaseModel):
     symbol: str = Field(description="The stock symbol related to this portfolio decision")
+    stock_type: Literal["growth", "value", "turnaround", "thematic"] = Field(description="The identified stock type based on the integrated analysis")
+    stock_type_classification_rationale: str = Field(description="The rationale behind classifying the stock into a specific type")
     action: Literal["buy", "hold", "sell"] = Field(description="The trading action decided by the portfolio manager for the next trading day")
     position: float = Field(description="The target position size for the given stock symbol, represented as a percentage of the total portfolio (e.g., 0.1 for 10%)")
     confidence_score: int = Field(description="Confidence score for the trading action, ranging from 0 to 10")

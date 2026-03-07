@@ -39,6 +39,30 @@ class NewsState(MessagesState):
     news_analysis_reports: Annotated[List[NewsAnalysisReport], operator.add]
     news_verification_reports: Annotated[List[NewsVerificationReport], operator.add]
 
+
+class CriticState(MessagesState):
+    financial_verification_reports: List[FinancialVerificationReport]
+    technical_verification_reports: List[TechnicalVerificationReport]
+    news_verification_reports: List[NewsVerificationReport]
+    critic_reflections: Annotated[List[str], operator.add]
+
+class PortfolioState(MessagesState):
+    user_query: str
+    mode: str
+    market_situation: str
+    end_date: str
+    strategy: str
+    critic_reflections: List[str]
+    # Analysis reports（新標的）
+    financial_analysis_reports: List[FinancialAnalysisReport]
+    technical_analysis_reports: List[TechnicalAnalysisReport]
+    news_analysis_reports: List[NewsAnalysisReport]
+    # Verification reports（庫存股）
+    financial_verification_reports: List[FinancialVerificationReport]
+    technical_verification_reports: List[TechnicalVerificationReport]
+    news_verification_reports: List[NewsVerificationReport]
+    portfolio_decisions: Annotated[List[PortfolioDecision], operator.add]
+
 class AgentState(MessagesState):
     user_query: Annotated[str, "The original user query that initiated the analysis and trading process"]
     mode: Annotated[str, "Operation mode: query or strategy"]
@@ -46,11 +70,6 @@ class AgentState(MessagesState):
     end_date: Annotated[str, _last_value]
 
     strategy: Annotated[str, "Investment strategy to follow, e.g. monthly_revenue_growth_roe"]
-
-    financial_messages: Annotated[List[AnyMessage], add_messages]
-    technical_messages: Annotated[List[AnyMessage], add_messages]
-    news_messages: Annotated[List[AnyMessage], add_messages]
-    portfolio_messages: Annotated[List[AnyMessage], add_messages]
 
     technical_tasks: Annotated[List[Task], operator.add]
     financial_tasks: Annotated[List[Task], operator.add]

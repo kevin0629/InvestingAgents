@@ -5,7 +5,6 @@ create_technical_analyst(llm) 回傳一個已 compile 的 StateGraph subgraph。
 每個 task 是一個獨立的 TechnicalState，透過 Send API 被呼叫。
 """
 
-from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder

@@ -4,15 +4,8 @@ Financial Analyst subgraph (test version).
 create_financial_analyst(llm) 回傳一個已 compile 的 StateGraph subgraph。
 每個 task 是一個獨立的 FinancialState，透過 Send API 被呼叫。
 """
-
-import operator
-from typing import Annotated, List
-from typing_extensions import TypedDict
-
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.messages import AnyMessage, HumanMessage
 from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
 from tradingagents.agents.utils.agent_output_formats import (
@@ -42,10 +35,10 @@ def create_financial_analyst(llm):
         return getattr(tool, "name", getattr(tool, "__name__", tool.__class__.__name__))
     
     tools = [
-        # get_balance_sheet,
-        # get_cashflow,
-        # get_company_info,
-        # get_dupont_analysis,
+        get_balance_sheet,
+        get_cashflow,
+        get_company_info,
+        get_dupont_analysis,
         get_factors,
         get_income_statement,
         get_monthly_revenue,

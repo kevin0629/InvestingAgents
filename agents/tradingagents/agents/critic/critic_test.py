@@ -4,30 +4,11 @@ Critic subgraph (test version).
 create_critic(llm) 回傳一個已 compile 的 StateGraph subgraph。
 Critic 只接收 VerificationReport，彙整上期持股的驗證結果並提煉教訓。
 """
-
-import operator
-from typing import Annotated, List
-from typing_extensions import TypedDict
-
-from langchain_core.messages import AnyMessage, HumanMessage
 from langgraph.prebuilt import ToolNode
 from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import add_messages
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from tradingagents.agents.utils.agent_states import CriticState
 
-from tradingagents.agents.utils.agent_output_formats import (
-    FinancialVerificationReport,
-    TechnicalVerificationReport,
-    NewsVerificationReport,
-)
-
-
-class CriticSubgraphState(TypedDict):
-    financial_verification_reports: List[FinancialVerificationReport]
-    technical_verification_reports: List[TechnicalVerificationReport]
-    news_verification_reports: List[NewsVerificationReport]
-    messages: Annotated[List[AnyMessage], add_messages]
-    critic_reflections: Annotated[List[str], operator.add]
 
 
 def create_critic(llm):
@@ -35,7 +16,7 @@ def create_critic(llm):
     只在有 VerificationReport 時才會被呼叫（由 route_after_analysts 控制）。
     """
 
-    def critic_node(state: CriticSubgraphState):
+    def critic_node(state: CriticState):
         reports_summary = (
             f"財務驗證報告:\n{state.get('financial_verification_reports')}\n\n"
             f"技術驗證報告:\n{state.get('technical_verification_reports')}\n\n"
@@ -73,11 +54,11 @@ def create_critic(llm):
         
         return {"messages": [chain.invoke(state["messages"])]}
 
-    def _format_node(state: CriticSubgraphState):
+    def _format_node(state: CriticState):
         final_text = state["messages"][-1].content
         return {"critic_reflections": [final_text]}
 
-    sg = StateGraph(CriticSubgraphState)
+    sg = StateGraph(CriticState)
     sg.add_node("critic_llm", critic_node)
     sg.add_node("critic_format", _format_node)
 

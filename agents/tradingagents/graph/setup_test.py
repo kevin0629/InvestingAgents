@@ -26,9 +26,6 @@ from tradingagents.agents.trader.portfolio_manager_test import create_portfolio_
 
 
 
-# ---------------------------------------------------------------------------
-# Routing helpers
-# ---------------------------------------------------------------------------
 class GraphSetup:
     """Handles the setup and configuration of the agent graph."""
 
@@ -42,9 +39,6 @@ class GraphSetup:
         self.deep_thinking_llm = deep_thinking_llm
 
     def _route_tasks(self, state: AgentState):
-        """Coordinator 完�?後、�? analyst ??Send API ??parallel 派送�?
-        end_date ??Send payload ?��?示�??�含?��?（Send API ?�親 state ?�自?��??��??��?）�?
-        """
         end_date = state.get("end_date", "")
         sends = []
         for task in state.get("financial_tasks", []):
@@ -53,25 +47,20 @@ class GraphSetup:
             sends.append(Send("technical_agent", {"task": task, "end_date": end_date}))
         for task in state.get("news_tasks", []):
             sends.append(Send("news_agent", {"task": task, "end_date": end_date}))
-        # ?�ス?��??��??��???fan-in ?�直??
+
         if not sends:
             sends.append(Send("analysts_done", {}))
         return sends
 
 
     def _route_after_analysts(self, state: AgentState) -> Literal["critic", "portfolio_manager"]:
-        """VerificationReport ?��??�ば Critic ?�、な?��??�直??Portfolio Manager ?��?"""
         has_verification = (
             bool(state.get("financial_verification_reports"))
             or bool(state.get("technical_verification_reports"))
             or bool(state.get("news_verification_reports"))
         )
         return "critic" if has_verification else "portfolio_manager"
-
-
-    # ---------------------------------------------------------------------------
-    # Graph factory
-    # ---------------------------------------------------------------------------
+    
 
     def setup_graph(self):
         """Build and compile the full agent graph."""
@@ -84,7 +73,6 @@ class GraphSetup:
 
         workflow = StateGraph(AgentState)
 
-        # ?�?� Nodes ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
         workflow.add_node("coordinator",       coordinator_node)
         workflow.add_node("financial_agent",   financial_agent)
         workflow.add_node("technical_agent",   technical_agent)
@@ -93,22 +81,18 @@ class GraphSetup:
         workflow.add_node("critic",            critic_node)
         workflow.add_node("portfolio_manager", portfolio_manager_node)
 
-        # ?�?� Edges ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
         workflow.add_edge(START, "coordinator")
 
-        # Coordinator ??analysts (Send API, parallel fan-out)
         workflow.add_conditional_edges(
             "coordinator",
             self._route_tasks,
             ["financial_agent", "technical_agent", "news_agent", "analysts_done"],
         )
 
-        # All analysts ??fan-in
         workflow.add_edge("financial_agent", "analysts_done")
         workflow.add_edge("technical_agent", "analysts_done")
         workflow.add_edge("news_agent",      "analysts_done")
 
-        # Fan-in ??critic or portfolio_manager
         workflow.add_conditional_edges(
             "analysts_done",
             self._route_after_analysts,

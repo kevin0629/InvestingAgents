@@ -5,7 +5,6 @@ create_news_analyst(llm) 回傳一個已 compile 的 StateGraph subgraph。
 每個 task 是一個獨立的 NewsState，透過 Send API 被呼叫。
 """
 
-from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -30,7 +29,7 @@ def create_news_analyst(llm):
 
     tools = [
         get_company_info,
-        # search_news,
+        search_news,
         NewsOutput,
     ]
 

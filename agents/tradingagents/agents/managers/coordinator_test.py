@@ -8,10 +8,6 @@ create_coordinator(llm) 回傳一個已 compile 的 StateGraph subgraph。
   → route → tools / format
 """
 
-import operator
-from typing import Annotated, List
-from typing_extensions import TypedDict
-
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
