@@ -2,7 +2,7 @@ import os
 import json
 import uuid
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+from datetime import datetime, date
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance,
@@ -12,10 +12,37 @@ from qdrant_client.models import (
     FieldCondition,
     MatchValue,
     SearchRequest,
+    Range,
 )
 from pathlib import Path
+from functools import lru_cache
+from agents.tradingagents.default_config import DEFAULT_CONFIG
+from agents.tradingagents.embedding_client import create_embedding_client
+from typing import Union
 
 
+def get_embedding(text: str) -> List[float]:
+    """
+    Compute embedding for `text` using provider specified in `DEFAULT_CONFIG`.
+
+    Supported providers use the unified embedding clients:
+    - openai -> langchain_openai.OpenAIEmbeddings
+    - google/gemini -> langchain_google_genai.GoogleGenerativeAIEmbeddings
+    """
+    provider = DEFAULT_CONFIG.get("embedding_provider", "openai")
+    if provider == "openai":
+        model = DEFAULT_CONFIG.get("openai_embedding_model", "text-embedding-3-small")
+    elif provider in ("google", "gemini"):
+        model = DEFAULT_CONFIG.get("gemini_embedding_model", "gemini-embedding-001")
+    else:
+        raise ValueError(f"Unknown embedding provider: {provider}")
+
+    embedding_client = create_embedding_client(provider=provider, model=model)
+    return embedding_client.get_embedding(text)
+
+
+
+@lru_cache(maxsize=1)
 def get_qdrant_client() -> QdrantClient:
     """
     獲取 Qdrant 客戶端
@@ -64,7 +91,6 @@ def ensure_collection_exists(
 
 def store_reflection(
     reflection_text: str,
-    embedding: List[float],
     metadata: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
@@ -72,7 +98,6 @@ def store_reflection(
     
     Args:
         reflection_text: Reflection 文本內容
-        embedding: Reflection 的向量表示 (embedding)
         metadata: 額外的 metadata，例如 {"strategy": "monthly_revenue_growth_roe", "date": "..."}
         
     Returns:
@@ -89,12 +114,30 @@ def store_reflection(
     if metadata is None:
         metadata = {}
     
-    # Add date if not present
+    # Add date if not present (store as integer timestamp for reliable range queries)
     if "date" not in metadata:
-        metadata["date"] = datetime.now().date()
+        metadata["date"] = int(datetime.now().timestamp())
+    else:
+        # normalize provided date/datetime to integer timestamp if necessary
+        provided = metadata["date"]
+        if isinstance(provided, (datetime, date)):
+            if isinstance(provided, date) and not isinstance(provided, datetime):
+                provided = datetime.combine(provided, datetime.min.time())
+            metadata["date"] = int(provided.timestamp())
+        else:
+            # if string or numeric, try to parse ISO date strings into timestamp
+            try:
+                if isinstance(provided, str):
+                    parsed = datetime.fromisoformat(provided)
+                    metadata["date"] = int(parsed.timestamp())
+            except Exception:
+                # leave value as provided (could already be an int timestamp)
+                pass
+        
     
     # Add reflection text to metadata
     metadata["reflection_text"] = reflection_text
+    embedding = get_embedding(reflection_text)
     
     try:
         # Ensure collection exists
@@ -131,14 +174,14 @@ def store_reflection(
 
 
 def retrieve_reflections(
-    query_embedding: List[float],
+    query_text: str,
     filter_conditions: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """
     從 Qdrant 檢索相關的 Reflections
     
     Args:
-        query_embedding: 查詢的向量表示
+        query_text: 查詢的文本內容
         filter_conditions: 過濾條件，例如 {"strategy": "monthly_revenue_growth_roe"}，只返回符合條件的 reflections
         
     Returns:
@@ -156,21 +199,44 @@ def retrieve_reflections(
     limit = 5
     score_threshold = 0.7
     collection_name = "reflections"
+    query_embedding = get_embedding(query_text)
+
 
     try:
         client = get_qdrant_client()
         
         # Build filter if conditions provided
+        # Support simple equality match as well as range queries.
+        # For range queries, pass a dict like: {"date": "2024-01-01"}
         search_filter = None
         if filter_conditions:
             must_conditions = []
             for key, value in filter_conditions.items():
-                must_conditions.append(
-                    FieldCondition(
-                        key=key,
-                        match=MatchValue(value=value)
+                # If key is 'date' and user provided a plain date string or timestamp,
+                # treat it as a user-friendly 'lt' (less-than) range and convert to timestamp.
+                if key == "date" and isinstance(value, (str, int, float)):
+                    try:
+                        if isinstance(value, (int, float)):
+                            range_val = int(value)
+                        else:
+                            # try ISO parse first, fallback to YYYY-MM-DD
+                            try:
+                                parsed = datetime.fromisoformat(value)
+                            except Exception:
+                                parsed = datetime.strptime(value, "%Y-%m-%d")
+                            range_val = int(parsed.timestamp())
+                    except Exception:
+                        range_val = value
+
+                    must_conditions.append(FieldCondition(key=key, range=Range(lt=range_val)))
+                else:
+                    # Simple equality match for other fields
+                    must_conditions.append(
+                        FieldCondition(
+                            key=key,
+                            match=MatchValue(value=value)
+                        )
                     )
-                )
             search_filter = Filter(must=must_conditions)
         
         # Search

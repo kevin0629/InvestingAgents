@@ -116,7 +116,7 @@ def search_news_for_agent(
     results = response.get("results", [])
     if not results:
         return (
-            f"查詢「{query}」未找到相關性足夠高的新聞結果（最低分數門檻: {MIN_SCORE_THRESHOLD}）。"
+            f"查詢「{query}」未找到相關性足夠高的新聞結果。"
             f"建議改用更具體的中文關鍵字並包含股票代號或公司名稱。"
         )
 
