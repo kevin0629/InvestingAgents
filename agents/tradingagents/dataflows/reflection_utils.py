@@ -21,12 +21,13 @@ from typing import Union
 
 
 def get_embedding(text: str) -> List[float]:
-    """
-    Compute embedding for `text` using provider specified in `DEFAULT_CONFIG`.
+    """Compute embedding for `text` using provider specified in `DEFAULT_CONFIG`.
 
-    Supported providers use the unified embedding clients:
-    - openai -> langchain_openai.OpenAIEmbeddings
-    - google/gemini -> langchain_google_genai.GoogleGenerativeAIEmbeddings
+    Notes:
+    - The function selects an embedding client by `DEFAULT_CONFIG['embedding_provider']`.
+    - For OpenAI it requests a 1536-dimension embedding (`text-embedding-3-small`).
+    - For Google/Gemini it requests a 1536-dimension embedding (`gemini-embedding-001`).
+    - Returns a list of floats representing the vector embedding.
     """
     kwargs = {}
     provider = DEFAULT_CONFIG.get("embedding_provider", "openai")
@@ -46,14 +47,11 @@ def get_embedding(text: str) -> List[float]:
 
 @lru_cache(maxsize=1)
 def get_qdrant_client() -> QdrantClient:
-    """
-    獲取 Qdrant 客戶端
-    
-    Returns:
-        QdrantClient instance
-        
-    Raises:
-        ValueError: If QDRANT_URL not configured properly
+    """Return a cached QdrantClient instance.
+
+    The client is created from the `QDRANT_URL` and optional `QDRANT_API_KEY`
+    environment variables. The result is cached (LRU) so repeated calls reuse
+    the same client object.
     """
     qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
     qdrant_api_key = os.getenv("QDRANT_API_KEY")
@@ -70,18 +68,21 @@ def store_reflection(
     reflection_text: str,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> str:
-    """
-    儲存 Reflection 到 Qdrant
-    
-    Args:
-        reflection_text: Reflection 文本內容
-        metadata: 額外的 metadata，例如 {"strategy": "monthly_revenue_growth_roe", "date": "..."}
-        
-    Returns:
-        儲存的 reflection ID (UUID string)
-        
-    Raises:
-        Exception: If both Qdrant and JSONL fallback fail
+    """Store a reflection (text + metadata) into Qdrant (or JSONL fallback).
+
+    Behavior notes:
+    - If `metadata` is omitted, an empty dict is created and a `date` key is
+         added with today's date (a `datetime.date` object, formatted YYYY-MM-DD).
+    - If `metadata['date']` is provided as a string in YYYY-MM-DD format it
+        will be parsed into a `datetime.date` object. Existing `date` values
+        that are already `datetime`/`date` objects are left as-is.
+    - The function computes an embedding for `reflection_text` and upserts a
+        `PointStruct` with `id`, `vector`, and `payload` (payload contains the
+        original metadata plus `reflection_text`).
+    - If Qdrant upsert fails and `fallback_to_jsonl` is True, the record is
+        appended to a JSONL fallback file.
+
+    Returns the created reflection UUID string (prefixed message).
     """
     collection_name = "reflections"
     fallback_to_jsonl = True
@@ -141,24 +142,18 @@ def retrieve_reflections(
     query_text: str,
     filter_conditions: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
-    """
-    從 Qdrant 檢索相關的 Reflections
-    
+    """Retrieve related reflections from Qdrant using a text query + optional filters.
+
     Args:
-        query_text: 查詢的文本內容
-        filter_conditions: 過濾條件，例如 {"strategy": "monthly_revenue_growth_roe"}，只返回符合條件的 reflections
-        
-    Returns:
-        包含相關 reflections 的列表，每個元素為：
-        {
-            "id": str,
-            "score": float,
-            "reflection_text": str,
-            "metadata": dict
-        }
-        
-    Raises:
-        Exception: If Qdrant query fails
+        query_text: Text to embed and use as the similarity query.
+        filter_conditions: Optional dict of payload filters. Supported forms:
+            - Exact matches: {"strategy": "monthly_revenue_growth_roe"}
+            - Date upper-bound: {"date": "YYYY-MM-DD"} will be converted to
+              a DatetimeRange lt filter using the provided date string.
+
+    Returns a list of dicts with keys: `id`, `score`, `reflection_text`, `metadata`.
+
+    Raises on Qdrant errors.
     """
     limit = 5
     score_threshold = 0.7
@@ -204,20 +199,15 @@ def retrieve_reflections(
 
         # qdrant-client returns QueryResponse with points in newer versions.
         # hits = getattr(query_result, "points", query_result)
-        print(f"Qdrant returned {len(query_result)} hits for query: '{query_text}' with filter: {filter_conditions}")
-        print(f"Raw Qdrant hits: {query_result}")
+        # print(f"Qdrant returned {len(query_result)} hits for query: '{query_text}' with filter: {filter_conditions}")
+        # print(f"Raw Qdrant hits: {query_result}")
         # Format results
-        results = []
+        header = "## 過往反思\n"
+        content = ""
         for hit in query_result:
-            result = {
-                "id": hit.id,
-                "score": hit.score,
-                "reflection_text": hit.payload.get("reflection_text", ""),
-                "metadata": {k: v for k, v in hit.payload.items() if k != "reflection_text"}
-            }
-            results.append(result)
+            content += f"- {hit.payload.get('reflection_text', '')} (score: {hit.score:.4f})\n"
         
-        return results
+        return header + content
         
     except Exception as e:
         print(f"Error retrieving from Qdrant: {e}")
