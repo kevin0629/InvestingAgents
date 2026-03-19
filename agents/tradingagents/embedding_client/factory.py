@@ -13,7 +13,7 @@ def create_embedding_client(
     """Create an embedding client for the specified provider.
 
     Args:
-        provider: Embedding provider (openai, google, gemini)
+        provider: Embedding provider (openai, google)
         model: Embedding model name/identifier
         **kwargs: Additional provider-specific arguments
 
@@ -29,7 +29,7 @@ def create_embedding_client(
         selected_model = model or "text-embedding-3-small"
         return OpenAIEmbeddingClient(selected_model, **kwargs)
 
-    if provider_lower in ("google", "gemini"):
+    if provider_lower == "google":
         selected_model = model or "gemini-embedding-001"
         return GoogleEmbeddingClient(selected_model, **kwargs)
 

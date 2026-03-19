@@ -11,13 +11,12 @@ from qdrant_client.models import (
     Filter,
     FieldCondition,
     MatchValue,
-    SearchRequest,
-    Range,
+    DatetimeRange,
 )
 from pathlib import Path
 from functools import lru_cache
-from agents.tradingagents.default_config import DEFAULT_CONFIG
-from agents.tradingagents.embedding_client import create_embedding_client
+from tradingagents.default_config import DEFAULT_CONFIG
+from tradingagents.embedding_client import create_embedding_client
 from typing import Union
 
 
@@ -29,15 +28,18 @@ def get_embedding(text: str) -> List[float]:
     - openai -> langchain_openai.OpenAIEmbeddings
     - google/gemini -> langchain_google_genai.GoogleGenerativeAIEmbeddings
     """
+    kwargs = {}
     provider = DEFAULT_CONFIG.get("embedding_provider", "openai")
     if provider == "openai":
         model = DEFAULT_CONFIG.get("openai_embedding_model", "text-embedding-3-small")
-    elif provider in ("google", "gemini"):
+        kwargs = {"dimensions": 1536}
+    elif provider in ("google"):
         model = DEFAULT_CONFIG.get("gemini_embedding_model", "gemini-embedding-001")
+        kwargs = {"output_dimensionality": 1536}
     else:
         raise ValueError(f"Unknown embedding provider: {provider}")
 
-    embedding_client = create_embedding_client(provider=provider, model=model)
+    embedding_client = create_embedding_client(provider=provider, model=model, **kwargs)
     return embedding_client.get_embedding(text)
 
 
@@ -62,31 +64,6 @@ def get_qdrant_client() -> QdrantClient:
         client = QdrantClient(url=qdrant_url)
     
     return client
-
-
-def ensure_collection_exists(
-    collection_name: str = "reflections",
-    vector_size: int = 1536,
-    distance: Distance = Distance.COSINE
-) -> None:
-    """
-    確保 Qdrant collection 存在，如果不存在則創建
-    
-    Args:
-        collection_name: Collection 名稱，預設為 "reflections"
-        vector_size: 向量維度，預設 1536 (OpenAI embedding size)
-        distance: 距離計算方式，預設 COSINE
-    """
-    client = get_qdrant_client()
-    
-    try:
-        client.get_collection(collection_name)
-    except Exception:
-        # Collection doesn't exist, create it
-        client.create_collection(
-            collection_name=collection_name,
-            vectors_config=VectorParams(size=vector_size, distance=distance),
-        )
 
 
 def store_reflection(
@@ -114,35 +91,22 @@ def store_reflection(
     if metadata is None:
         metadata = {}
     
-    # Add date if not present (store as integer timestamp for reliable range queries)
+    # Add date if not present (store as datetime for reliable range queries)
     if "date" not in metadata:
-        metadata["date"] = int(datetime.now().timestamp())
+        metadata["date"] = datetime.now().date()
     else:
         # normalize provided date/datetime to integer timestamp if necessary
         provided = metadata["date"]
-        if isinstance(provided, (datetime, date)):
-            if isinstance(provided, date) and not isinstance(provided, datetime):
-                provided = datetime.combine(provided, datetime.min.time())
-            metadata["date"] = int(provided.timestamp())
-        else:
-            # if string or numeric, try to parse ISO date strings into timestamp
-            try:
-                if isinstance(provided, str):
-                    parsed = datetime.fromisoformat(provided)
-                    metadata["date"] = int(parsed.timestamp())
-            except Exception:
-                # leave value as provided (could already be an int timestamp)
-                pass
+        if not isinstance(provided, (datetime, date)):
+            if isinstance(provided, str):
+                metadata["date"] = datetime.strptime(provided, "%Y-%m-%d").date()
         
     
     # Add reflection text to metadata
     metadata["reflection_text"] = reflection_text
     embedding = get_embedding(reflection_text)
     
-    try:
-        # Ensure collection exists
-        ensure_collection_exists(collection_name=collection_name, vector_size=len(embedding))
-        
+    try:        
         client = get_qdrant_client()
         
         # Create point
@@ -214,21 +178,12 @@ def retrieve_reflections(
             for key, value in filter_conditions.items():
                 # If key is 'date' and user provided a plain date string or timestamp,
                 # treat it as a user-friendly 'lt' (less-than) range and convert to timestamp.
-                if key == "date" and isinstance(value, (str, int, float)):
-                    try:
-                        if isinstance(value, (int, float)):
-                            range_val = int(value)
-                        else:
-                            # try ISO parse first, fallback to YYYY-MM-DD
-                            try:
-                                parsed = datetime.fromisoformat(value)
-                            except Exception:
-                                parsed = datetime.strptime(value, "%Y-%m-%d")
-                            range_val = int(parsed.timestamp())
-                    except Exception:
-                        range_val = value
+                if key == "date" and isinstance(value, (str)):
+                    range_val = datetime.strptime(value, "%Y-%m-%d").date()
+                    range_val = value
 
-                    must_conditions.append(FieldCondition(key=key, range=Range(lt=range_val)))
+                    must_conditions.append(FieldCondition(key=key, range=DatetimeRange(lt=range_val)))
+                    print(f"Added range filter for 'date' with lt {range_val} (original value: {value})")
                 else:
                     # Simple equality match for other fields
                     must_conditions.append(
@@ -239,18 +194,21 @@ def retrieve_reflections(
                     )
             search_filter = Filter(must=must_conditions)
         
-        # Search
-        search_result = client.search(
+        query_result = client.query_points(
             collection_name=collection_name,
-            query_vector=query_embedding,
+            query=query_embedding,
             limit=limit,
             score_threshold=score_threshold,
             query_filter=search_filter
-        )
-        
+        ).points
+
+        # qdrant-client returns QueryResponse with points in newer versions.
+        # hits = getattr(query_result, "points", query_result)
+        print(f"Qdrant returned {len(query_result)} hits for query: '{query_text}' with filter: {filter_conditions}")
+        print(f"Raw Qdrant hits: {query_result}")
         # Format results
         results = []
-        for hit in search_result:
+        for hit in query_result:
             result = {
                 "id": hit.id,
                 "score": hit.score,
@@ -264,77 +222,6 @@ def retrieve_reflections(
     except Exception as e:
         print(f"Error retrieving from Qdrant: {e}")
         raise
-
-
-def get_reflection_by_id(
-    reflection_id: str,
-    collection_name: str = "reflections"
-) -> Optional[Dict[str, Any]]:
-    """
-    根據 ID 獲取特定的 Reflection
-    
-    Args:
-        reflection_id: Reflection 的 UUID
-        collection_name: Collection 名稱，預設為 "reflections"
-        
-    Returns:
-        包含 reflection 資料的字典，如果不存在則返回 None
-        {
-            "id": str,
-            "reflection_text": str,
-            "metadata": dict
-        }
-    """
-    try:
-        client = get_qdrant_client()
-        
-        points = client.retrieve(
-            collection_name=collection_name,
-            ids=[reflection_id]
-        )
-        
-        if not points:
-            return None
-        
-        point = points[0]
-        return {
-            "id": point.id,
-            "reflection_text": point.payload.get("reflection_text", ""),
-            "metadata": {k: v for k, v in point.payload.items() if k != "reflection_text"}
-        }
-        
-    except Exception as e:
-        print(f"Error retrieving reflection by ID: {e}")
-        return None
-
-
-def delete_reflection(
-    reflection_id: str,
-    collection_name: str = "reflections"
-) -> bool:
-    """
-    刪除指定的 Reflection
-    
-    Args:
-        reflection_id: Reflection 的 UUID
-        collection_name: Collection 名稱，預設為 "reflections"
-        
-    Returns:
-        是否成功刪除
-    """
-    try:
-        client = get_qdrant_client()
-        
-        client.delete(
-            collection_name=collection_name,
-            points_selector=[reflection_id]
-        )
-        
-        return True
-        
-    except Exception as e:
-        print(f"Error deleting reflection: {e}")
-        return False
 
 
 def _write_to_jsonl_fallback(
@@ -385,7 +272,7 @@ def get_collection_stats(collection_name: str = "reflections") -> Dict[str, Any]
         
         return {
             "collection_name": collection_name,
-            "vectors_count": collection_info.vectors_count,
+            "vectors_count": collection_info.indexed_vectors_count,
             "points_count": collection_info.points_count,
             "status": collection_info.status
         }
@@ -393,3 +280,59 @@ def get_collection_stats(collection_name: str = "reflections") -> Dict[str, Any]
     except Exception as e:
         print(f"Error getting collection stats: {e}")
         return {}
+
+
+
+def _realistic_samples():
+    """Representative production-like reflections and metadata."""
+    return [
+        {
+            "reflection_text": (
+                "TSMC monthly revenue grew 23% YoY for two consecutive months, "
+                "gross margin stayed above 53%, and AI-related demand from hyperscalers "
+                "kept utilization above 90%. Risk is valuation expansion outpacing earnings."
+            ),
+            "metadata": {
+                "strategy": "monthly_revenue_growth_roe",
+                "date": "2025-12-20",
+            },
+            "query": "Semiconductor AI demand and margin sustainability for TSMC",
+        },
+        {
+            "reflection_text": (
+                "MediaTek inventory cycle improved, handset mix shifted toward premium chips, "
+                "and operating margin stabilized. However, order visibility from Android OEMs "
+                "is still volatile, so position sizing should remain moderate."
+            ),
+            "metadata": {
+                "strategy": "quality_growth_pullback",
+                "date": "2025-11-15",
+            },
+            "query": "Inventory normalization and earnings visibility for MediaTek",
+        },
+        {
+            "reflection_text": (
+                "TSMC is a very good company with strong fundamentals and growth prospects."
+                "However, the stock is currently overvalued and due for a pullback."
+                "I would wait for a better entry point before buying."
+            ),
+            "metadata": {
+                "strategy": "monthly_revenue_growth_roe",
+                "date": "2025-12-20",
+            },
+            "query": "Semiconductor AI demand and margin sustainability for TSMC",
+        },
+    ]
+
+
+if __name__ == "__main__":
+    # Simple smoke test
+    from dotenv import load_dotenv
+    load_dotenv()
+
+
+    samples = _realistic_samples()
+    result = retrieve_reflections(query_text=samples[0]["query"],filter_conditions={"strategy": "monthly_revenue_growth_roe", "date": "2025-12-31"})
+    print(result)
+    # store_reflection(reflection_text=samples[2]["reflection_text"], metadata=samples[2]["metadata"])
+    # print(get_collection_stats())

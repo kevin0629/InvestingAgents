@@ -16,11 +16,9 @@ DEFAULT_CONFIG = {
     "google_thinking_level": None,      # "high", "minimal", etc.
     "openai_reasoning_effort": None,    # "medium", "high", "low"
     # Embedding settings for persistent reflection Agentic RAG
-    "embedding_provider": "gemini",    # Options: openai, gemini
+    "embedding_provider": "google",    # Options: openai, google
     "openai_embedding_model": "text-embedding-3-small",
-    "gemini_embedding_model": "gemini-embedding-001",
-    "reflection_collection_name": "critic_reflections",
-    "reflection_top_k": int(os.getenv("REFLECTION_TOP_K", "5")),
+    "google_embedding_model": "gemini-embedding-001",
     # Local observability/tracing
     "langfuse_session_id": None,
     # Debate and discussion settings
