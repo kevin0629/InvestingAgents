@@ -16,13 +16,14 @@ from tradingagents.agents.utils.agent_output_formats import (
 )
 from tradingagents.agents.utils.graph_helpers import clear_messages
 from tradingagents.agents.utils.agent_states import PortfolioState
+from tradingagents.agents.utils.agent_utils import get_tools
 
 
 
 def create_portfolio_manager(llm):
     """回傳 Portfolio Manager 的 compiled subgraph。"""
-
     tools = [PortfolioDecisions]
+    tool_names = get_tools(tools)
 
     def portfolio_manager_node(state: PortfolioState):
         # user_query = state.get("user_query", "No user query provided.")

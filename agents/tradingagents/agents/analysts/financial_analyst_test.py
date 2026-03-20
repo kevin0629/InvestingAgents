@@ -15,6 +15,7 @@ from tradingagents.agents.utils.agent_output_formats import (
     FinancialOutput
 )
 from tradingagents.agents.utils.agent_utils import (
+    get_tools,
     get_balance_sheet,
     get_cashflow,
     get_company_info,
@@ -31,9 +32,6 @@ from tradingagents.agents.utils.agent_states import FinancialState
 
 def create_financial_analyst(llm):
     """回傳 Financial Analyst 的 compiled subgraph。"""
-    def _tool_name(tool):
-        return getattr(tool, "name", getattr(tool, "__name__", tool.__class__.__name__))
-    
     tools = [
         get_balance_sheet,
         get_cashflow,
@@ -45,6 +43,7 @@ def create_financial_analyst(llm):
         get_river_chart,
         FinancialOutput,
     ]
+    tool_names = get_tools(tools)
 
     def financial_analyst_node(state: FinancialState):
         task = state["task"]
@@ -107,7 +106,7 @@ def create_financial_analyst(llm):
             task_type=task.task_type,
             buy_reason=task.buy_reason if task.task_type == "VERIFICATION" else "N/A",
         )
-        prompt = prompt.partial(tool_names=", ".join([_tool_name(tool) for tool in tools]))
+        prompt = prompt.partial(tool_names=tool_names)
 
         chain = prompt | llm.bind_tools(tools)   # tool_choice="any" 時就無法同時使用會回傳圖片、文字的 tool，使用的話會導致 LLM 在看到末尾的 HumanMessage（攜帶圖片）後強制再呼叫工具而進入無限循環；
 

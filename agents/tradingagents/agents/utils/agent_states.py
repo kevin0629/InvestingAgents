@@ -1,8 +1,6 @@
 import operator
 from typing import Annotated, Any, Dict, List
 from langgraph.graph import MessagesState
-from langgraph.graph.message import add_messages
-from langchain_core.messages import AnyMessage
 from .agent_output_formats import *
 
 
@@ -12,9 +10,9 @@ def _last_value(a, b):
 
 
 class CoordinatorState(MessagesState):
-    user_query: str
-    mode: str
-    market_situation: str
+    # user_query: str
+    # mode: str
+    # market_situation: str
     end_date: str
     strategy: str
     financial_tasks: Annotated[List[Task], operator.add]
@@ -38,6 +36,12 @@ class NewsState(MessagesState):
     end_date: str
     news_analysis_reports: Annotated[List[NewsAnalysisReport], operator.add]
     news_verification_reports: Annotated[List[NewsVerificationReport], operator.add]
+
+
+class MacroState(MessagesState):
+    end_date: str
+    market_situation: str
+    macro_analysis_report: 
 
 
 class CriticState(MessagesState):
@@ -64,8 +68,8 @@ class PortfolioState(MessagesState):
     portfolio_decisions: Annotated[List[PortfolioDecision], operator.add]
 
 class AgentState(MessagesState):
-    user_query: Annotated[str, "The original user query that initiated the analysis and trading process"]
-    mode: Annotated[str, "Operation mode: query or strategy"]
+    # user_query: Annotated[str, "The original user query that initiated the analysis and trading process"]
+    # mode: Annotated[str, "Operation mode: query or strategy"]
     market_situation: Annotated[str, "Current market situation"]
     end_date: Annotated[str, _last_value]
 

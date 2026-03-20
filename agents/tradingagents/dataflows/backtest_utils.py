@@ -31,27 +31,28 @@ def get_backtest_report(
     response = requests.get(url, params=params)
     response.raise_for_status()
 
-    performance = response.json().get("performance", {})
-    next_holdings = response.json().get("current_holdings", [])
+    # performance = response.json().get("performance", {})
+    # next_holdings = response.json().get("current_holdings", [])
 
-    header = f"## 策略回測報告: {strategy_name}\n\n"
+    # header = f"## 策略回測報告: {strategy_name}\n\n"
 
-    content = "### 策略歷史績效(自2005年起)\n"
-    for key, value in performance.items():
-        content += f"{key}: {value}, "
+    # content = "### 策略歷史績效(自2005年起)\n"
+    # for key, value in performance.items():
+    #     content += f"{key}: {value}, "
 
-    for holding in next_holdings:
-        if isinstance(holding, dict):
-            holding.pop("entry_price", None)
-            holding.pop("entry_date", None)
+    # for holding in next_holdings:
+    #     if isinstance(holding, dict):
+    #         holding.pop("entry_price", None)
+    #         holding.pop("entry_date", None)
             
-    content += "\n### 下期交易訊號\n"
-    content += pd.DataFrame(next_holdings).to_csv(index=False)
+    # content += "\n### 下期交易訊號\n"
+    # content += pd.DataFrame(next_holdings).to_csv(index=False)
 
-    return header + content
+    # return header + content
+    return response.json()
 
 
-def get_strategy() -> str:
+def get_strategy() -> Dict[str, str]:
     """
     獲取所有已知的策略與其描述
     
@@ -68,20 +69,22 @@ def get_strategy() -> str:
 
     response = requests.get(url)
     response.raise_for_status()
-    data = response.json().get("strategies", [])
+    data = response.json()
+    # data = response.json().get("strategies", [])
 
-    header = "## 可用策略列表\n"
+    # header = "## 可用策略列表\n"
 
-    content = ""
-    for strategy in data:
-        for key, value in strategy.items():
-            if key == "name":
-                content += value
-            elif key == "description":
-                content += f", {key}: {value}\n"
-                break
+    # content = ""
+    # for strategy in data:
+    #     for key, value in strategy.items():
+    #         if key == "name":
+    #             content += value
+    #         elif key == "description":
+    #             content += f", {key}: {value}\n"
+    #             break
 
-    return header + content
+    # return header + content
+    return data
 
 
 if __name__ == "__main__":

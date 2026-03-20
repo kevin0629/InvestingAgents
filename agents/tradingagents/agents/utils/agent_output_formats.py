@@ -4,8 +4,9 @@ from typing import List, Literal, Optional
 class Task(BaseModel):
     symbol: str = Field(description="The stock symbol related to this task, must be integer string like '2330', '2455', '3491'")
     task_type: Literal["ANALYSIS", "VERIFICATION"] = Field(None, description="Type of the technical task")
-    task: str = Field(description="Detailed description of the task")
+    # task: str = Field(description="Detailed description of the task")
     buy_reason: Optional[str] = Field(None, description="The reason for recommending a buy action, if task_type is VERIFICATION else None")
+    company_info: Optional[str] = Field(None, description="Company basic information")
 
 class CoordinatorOutput(BaseModel):
     """Respond to the user with this"""
@@ -41,8 +42,6 @@ class FinancialOutput(BaseModel):
     financial_analysis_reports: List[FinancialAnalysisReport] = Field(None, description="Financial analyst outputs for analysis")
     financial_verification_reports: List[FinancialVerificationReport] = Field(None, description="Financial analyst reflections for verification")
 
-
-
 class NewsAnalysisReport(BaseModel):
     symbol: str = Field(description="The stock symbol related to this news analysis report")
     signal: Literal["strong_buy", "buy", "neutral", "sell", "strong_sell"] = Field(description="Investment recommendation based on the news analysis")
@@ -61,6 +60,11 @@ class NewsOutput(BaseModel):
     """Respond to the user with news_analysis_reports when the task_type is ANALYSIS, or news_verification_reports when the task_type is VERIFICATION"""
     news_analysis_reports: List[NewsAnalysisReport] = Field(None, description="News analyst outputs for analysis")
     news_verification_reports: List[NewsVerificationReport] = Field(None, description="News analyst reflections for verification")
+
+class MacroAnalysisReport(BaseModel):
+    signal: Literal["strong_buy", "buy", "neutral", "sell", "strong_sell"] = Field(description="Investment recommendation based on the macro analysis")
+    confidence_score: int = Field(description="Confidence score for the investment recommendation, ranging from 0 to 10")
+    report: str = Field(description="Detailed macro analysis report")
 
 
 class TechnicalAnalysisReport(BaseModel):

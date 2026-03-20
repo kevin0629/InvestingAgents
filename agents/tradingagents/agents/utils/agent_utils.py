@@ -30,6 +30,7 @@ from tradingagents.agents.utils.reflection_data_tools import (
 
 __all__ = [
     "create_msg_delete",
+    "get_tools",
     "get_stock_data",
     "get_taiex_data",
     "get_company_info",
@@ -46,6 +47,12 @@ __all__ = [
     "store_reflection",
     "retrieve_reflections",
 ]
+
+
+def get_tools(tools) -> str:
+    """獲取工具名稱列表的格式化字符串，供 prompt 使用"""
+    return ", ".join(getattr(tool, "name", getattr(tool, "__name__", tool.__class__.__name__)) for tool in tools)
+
 
 def create_msg_delete():
     def delete_messages(state):
