@@ -24,7 +24,7 @@ def create_macro_analyst(llm):
     """回傳 Macro Analyst 的 compiled subgraph。"""
     tools = [
         get_taiex_data,
-        search_news,
+        # search_news,
         MacroAnalysisReport,
     ]
     tool_names = get_tools(tools)
@@ -62,9 +62,7 @@ def create_macro_analyst(llm):
             ]
         )
 
-        prompt = prompt.partial(
-            end_date=end_date,
-        )
+        prompt = prompt.partial(end_date=end_date)
         prompt = prompt.partial(tool_names=tool_names)
 
         chain = prompt | llm.bind_tools(tools, tool_choice="any") # tool_choice="any" 時就無法同時使用會回傳圖片、文字的 tool，使用的話會導致 LLM 在看到末尾的 HumanMessage（攜帶圖片）後強制再呼叫工具而進入無限循環；

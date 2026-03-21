@@ -42,7 +42,6 @@ def create_technical_analyst(llm):
                 (
                     "system",
                     "你是一位技術分析師，主要任務是分析 {symbol} 的價格、成交量與技術指標，並判讀未來的走勢。\n"
-                    "【資料截止日期】本次分析截止日期為 {end_date}。"
                     "所有工具呼叫的 end_date 參數皆必須設為 {end_date}，為本次資料分析截止日期，"
                     "絕對不得使用超過此日期的任何資料。\n\n"
                     "你可以使用下列工具: {tool_names}\n\n"
@@ -72,13 +71,11 @@ def create_technical_analyst(llm):
 
         print("Technical Analyst received task dict:", task)
         print("Technical Analyst received end_date:", end_date)
-        print("Technical Analyst available task", task.task)
         print("Technical Analyst available symbol", task.symbol)
         print("Technical Analyst available task_type", task.task_type)
         print("Technical Analyst available buy_reason", task.buy_reason)
 
         prompt = prompt.partial(
-            task=task.task,
             symbol=task.symbol,
             end_date=end_date,
             task_type=task.task_type,

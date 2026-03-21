@@ -24,8 +24,7 @@ from tradingagents.agents.utils.agent_states import NewsState
 def create_news_analyst(llm):
     """回傳 News Analyst 的 compiled subgraph。"""
     tools = [
-        get_company_info,
-        search_news,
+        # search_news,
         NewsOutput,
     ]
 
@@ -44,6 +43,8 @@ def create_news_analyst(llm):
                     "你是一位新聞分析師，主要任務是從紛雜的新聞資訊中，提煉出對 {symbol} 股價有實質影響的催化劑。"
                     "你負責分析非結構化的文字資訊（擴廠、新產能、新技術、新產品、產業趨勢、供應鏈等），"
                     "並將其轉化為對未來股價的影響力評估。\n"
+                    "{symbol} 的基本資料：\n"
+                    "{company_info}\n\n"
                     "所有工具呼叫的 end_date 參數皆必須設為 {end_date}，為本次資料分析截止日期，"
                     "絕對不得使用超過此日期的任何資料。\n\n"
                     "你可以使用下列工具: {tool_names}\n\n"
@@ -76,11 +77,13 @@ def create_news_analyst(llm):
         print("News Analyst available symbol", task.symbol)
         print("News Analyst available task_type", task.task_type)
         print("News Analyst available buy_reason", task.buy_reason)
+        print("News Analyst available company_info", task.company_info)
 
         prompt = prompt.partial(
             symbol=task.symbol,
             end_date=end_date,
             task_type=task.task_type,
+            company_info=task.company_info,
             buy_reason=task.buy_reason if task.task_type == "VERIFICATION" else "N/A",
         )
         prompt = prompt.partial(tool_names=tool_names)

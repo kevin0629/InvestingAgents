@@ -35,7 +35,6 @@ def create_financial_analyst(llm):
     tools = [
         get_balance_sheet,
         get_cashflow,
-        get_company_info,
         get_dupont_analysis,
         get_factors,
         get_income_statement,
@@ -56,6 +55,8 @@ def create_financial_analyst(llm):
                 (
                     "system",
                     "你是一位財務分析師，主要任務是要任務要評估 {symbol} 股價是被低估還是被高估，並分析未來公司股價上升的可能性。\n"
+                    "{symbol} 的基本資料：\n"
+                    "{company_info}\n\n"
                     "你可以使用的工具: {tool_names}\n"
                     "所有工具呼叫的 end_date 參數皆必須設為 {end_date}，為本次資料分析截止日期，嚴禁使用截止日期以後的資料。\n"
                     "分析步驟:\n"
@@ -90,18 +91,17 @@ def create_financial_analyst(llm):
             ]
         )
 
-        print("Financial Analyst received task dict:", task)
-        print("Financial Analyst received end_date:", end_date)
-        print("Financial Analyst available task", task.task)
         print("Financial Analyst available symbol", task.symbol)
+        print("Financial Analyst received end_date:", end_date)
         print("Financial Analyst available task_type", task.task_type)
         print("Financial Analyst available buy_reason", task.buy_reason)
+        print("Financial Analyst available company_info", task.company_info)
 
         prompt = prompt.partial(
-            task=task.task,
             symbol=task.symbol,
             end_date=end_date,
             task_type=task.task_type,
+            company_info=task.company_info,
             buy_reason=task.buy_reason if task.task_type == "VERIFICATION" else "N/A",
         )
         prompt = prompt.partial(tool_names=tool_names)
