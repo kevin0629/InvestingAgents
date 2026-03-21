@@ -26,18 +26,16 @@ def create_portfolio_manager(llm):
     tool_names = get_tools(tools)
 
     def portfolio_manager_node(state: PortfolioState):
-        # user_query = state.get("user_query", "No user query provided.")
-        # mode = state.get("mode", "Unknown")
         end_date = state.get("end_date", "Unknown")
-        # strategy = state.get("strategy", "Unknown")
-        market_situation = state.get("market_situation", "Unknown")
+        strategy = state.get("strategy", "Unknown")
 
         fin_analysis   = state.get("financial_analysis_reports") or []
         tech_analysis  = state.get("technical_analysis_reports") or []
         news_analysis  = state.get("news_analysis_reports") or []
-        fin_verify     = state.get("financial_verification_reports") or []
-        tech_verify    = state.get("technical_verification_reports") or []
-        news_verify    = state.get("news_verification_reports") or []
+        macro_analysis = state.get("macro_analysis_report")
+        # fin_verify     = state.get("financial_verification_reports") or []
+        # tech_verify    = state.get("technical_verification_reports") or []
+        # news_verify    = state.get("news_verification_reports") or []
         # critic_summary = "\n".join(state.get("critic_reflections") or [])
 
         prompt = ChatPromptTemplate.from_messages(
@@ -65,16 +63,12 @@ def create_portfolio_manager(llm):
                     "   - Score < 5: Sell（減碼/清倉）\n\n"
                     "4. 基於整合後的結論，向使用者提出具體、可操作的建議，並說明背後的邏輯。\n"
                     "完成決策後，請使用 PortfolioDecisions 工具輸出結構化結果。"
-                    "市場情況: {market_situation}\n"
+                    "市場情況: {macro_analysis}\n"
                     "本次產生訊號的日期為 {end_date}，會在下個交易日以收盤價做交易\n"
-                    "━━━ 新標的分析報告 (ANALYSIS) ━━━\n"
+                    "━━━ 新標的分析報告 ━━━\n"
                     "財務分析: {fin_analysis}\n"
                     "技術分析: {tech_analysis}\n"
                     "新聞分析: {news_analysis}\n\n"
-                    "━━━ 庫存股驗證報告 (VERIFICATION) ━━━\n"
-                    "財務驗證: {fin_verify}\n"
-                    "技術驗證: {tech_verify}\n"
-                    "新聞驗證: {news_verify}\n\n"
                 ),
                 MessagesPlaceholder(variable_name="messages"),
             ]
@@ -82,13 +76,10 @@ def create_portfolio_manager(llm):
 
         prompt = prompt.partial(
             end_date=end_date,
-            market_situation=market_situation,
+            macro_analysis=macro_analysis,
             fin_analysis=fin_analysis,
             tech_analysis=tech_analysis,
             news_analysis=news_analysis,
-            fin_verify=fin_verify,
-            tech_verify=tech_verify,
-            news_verify=news_verify,
         )
         chain = prompt | llm.bind_tools(tools, tool_choice="any")
         

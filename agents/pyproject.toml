@@ -36,6 +36,8 @@ dependencies = [
     "qdrant-client>=1.16.2",
     "tavily-python>=0.7.21",
     "matplotlib>=3.10.8",
+    "langchain>=1.2.13",
+    "langchain-community>=0.4.1",
 ]
 
 [project.scripts]

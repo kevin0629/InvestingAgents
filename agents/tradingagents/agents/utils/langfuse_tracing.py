@@ -9,7 +9,7 @@ def create_langfuse_callback(trace_name: str, session_id: Optional[str] = None):
 
     public_key = os.getenv("LANGFUSE_PUBLIC_KEY")
     secret_key = os.getenv("LANGFUSE_SECRET_KEY")
-    host = os.getenv("LANGFUSE_HOST", "http://localhost:3000")
+    host = os.getenv("LANGFUSE_BASE_URL", "http://localhost:3000")
 
     if not public_key or not secret_key:
         return None

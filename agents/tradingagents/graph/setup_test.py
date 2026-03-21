@@ -4,25 +4,29 @@ Graph assembly (test version).
 setup_graph(llm) ??compiled StateGraph
 
 Architecture:
-  coordinator ?�?�(Send API)?�?�??financial_agent ?�??
-                          ?�?�??technical_agent ?�?�?��???analysts_done ?�?�(has verification?)?�?�??critic ?�?�??portfolio_manager
-                          ?�?�??news_agent      ?�??                 ?�?�(no verification?)?�?�?�?�?�?�?�?�?�?�?�?�?�?�??portfolio_manager
+    distributor ?�?�(Send API)?�?�??macro_agent ?�??
+                                                    ?�?�??financial_agent ?�??
+                                                    ?�?�??technical_agent ?�?�?��???analysts_done ?�?�(has verification?)?�?�??critic ?�?�??portfolio_manager
+                                                    ?�?�??news_agent      ?�??                 ?�?�(no verification?)?�?�?�?�?�?�?�?�?�?�?�?�?�?�??portfolio_manager
 """
 
 from typing import Literal
 
-from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
 from langgraph.constants import Send
 from langgraph.graph import END, START, StateGraph
+from langfuse.langchain import CallbackHandler
 
-from tradingagents.agents.utils.agent_states import AgentState
-from tradingagents.agents.managers.coordinator_test import create_coordinator
-from tradingagents.agents.analysts.financial_analyst_test import create_financial_analyst
-from tradingagents.agents.analysts.technical_analyst_test import create_technical_analyst
-from tradingagents.agents.analysts.news_analyst_test import create_news_analyst
-from tradingagents.agents.critic.critic_test import create_critic
-from tradingagents.agents.trader.portfolio_manager_test import create_portfolio_manager
+from tradingagents.agents import (
+    AgentState,
+    create_distributor,
+    create_financial_analyst,
+    create_technical_analyst,
+    create_news_analyst,
+    create_macro_analyst,
+    create_critic,
+    create_portfolio_manager,
+)
 
 
 
@@ -41,15 +45,13 @@ class GraphSetup:
     def _route_tasks(self, state: AgentState):
         end_date = state.get("end_date", "")
         sends = []
+        sends.append(Send("macro_agent", {"end_date": end_date}))
         for task in state.get("financial_tasks", []):
             sends.append(Send("financial_agent", {"task": task, "end_date": end_date}))
         for task in state.get("technical_tasks", []):
             sends.append(Send("technical_agent", {"task": task, "end_date": end_date}))
         for task in state.get("news_tasks", []):
             sends.append(Send("news_agent", {"task": task, "end_date": end_date}))
-
-        if not sends:
-            sends.append(Send("analysts_done", {}))
         return sends
 
 
@@ -64,16 +66,20 @@ class GraphSetup:
 
     def setup_graph(self):
         """Build and compile the full agent graph."""
-        coordinator_node      = create_coordinator(self.deep_thinking_llm)
+        langfuse_handler = CallbackHandler()
+        
+        distributor_node      = create_distributor()
         financial_agent       = create_financial_analyst(self.quick_thinking_llm)
         technical_agent       = create_technical_analyst(self.quick_thinking_llm)
         news_agent            = create_news_analyst(self.quick_thinking_llm)
+        macro_agent           = create_macro_analyst(self.quick_thinking_llm)
         critic_node           = create_critic(self.deep_thinking_llm)
         portfolio_manager_node = create_portfolio_manager(self.deep_thinking_llm)
 
         workflow = StateGraph(AgentState)
 
-        workflow.add_node("coordinator",       coordinator_node)
+        workflow.add_node("distributor",       distributor_node)
+        workflow.add_node("macro_agent",       macro_agent)
         workflow.add_node("financial_agent",   financial_agent)
         workflow.add_node("technical_agent",   technical_agent)
         workflow.add_node("news_agent",        news_agent)
@@ -81,14 +87,15 @@ class GraphSetup:
         workflow.add_node("critic",            critic_node)
         workflow.add_node("portfolio_manager", portfolio_manager_node)
 
-        workflow.add_edge(START, "coordinator")
+        workflow.add_edge(START, "distributor")
 
         workflow.add_conditional_edges(
-            "coordinator",
+            "distributor",
             self._route_tasks,
-            ["financial_agent", "technical_agent", "news_agent", "analysts_done"],
+            ["macro_agent", "financial_agent", "technical_agent", "news_agent", "analysts_done"],
         )
 
+        workflow.add_edge("macro_agent", "analysts_done")
         workflow.add_edge("financial_agent", "analysts_done")
         workflow.add_edge("technical_agent", "analysts_done")
         workflow.add_edge("news_agent",      "analysts_done")
@@ -102,4 +109,4 @@ class GraphSetup:
         workflow.add_edge("critic", "portfolio_manager")
         workflow.add_edge("portfolio_manager", END)
 
-        return workflow.compile()
+        return workflow.compile().with_config({"callbacks": [langfuse_handler]})

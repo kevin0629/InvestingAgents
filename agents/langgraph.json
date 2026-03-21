@@ -3,9 +3,7 @@
     "."
   ],
   "graphs": {
-    "investingagents": "tradingagents.graph.langgraph_dev:build_graph",
-    "test_graph": "tradingagents.graph.langgraph_test:build_graph",
-    "test": "tradingagents.graph.test:graph"
+    "test_graph": "tradingagents.graph.langgraph_test:build_graph"
   },
   "env": ".env"
 }

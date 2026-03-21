@@ -11,7 +11,6 @@ from tradingagents.agents import (
     FinancialState,
     TechnicalState,
     NewsState,
-    create_coordinator,
     create_critic,
     create_financial_analyst,
     create_technical_analyst,

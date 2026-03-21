@@ -7,12 +7,14 @@ from typing import Any, Dict, List
 
 from langgraph.graph import END, START, StateGraph
 
-from tradingagents.agents.utils.agent_states import CoordinatorState
-from tradingagents.agents.utils.agent_utils import (
-    get_backtest_report,
-    get_company_info,
-    get_strategy,
-)
+from tradingagents.agents.utils.agent_states import DistributorState
+# from tradingagents.agents.utils.agent_utils import (
+#     get_backtest_report,
+#     get_company_info,
+#     get_strategy,
+# )
+from tradingagents.dataflows.backtest_utils import get_strategy, get_backtest_report
+from tradingagents.dataflows.fundamentals_utils import get_company_by_symbol
 
 
 # def _invoke_tool(tool: Any, payload: Dict[str, Any] | None = None) -> Any:
@@ -113,7 +115,7 @@ def _build_tasks(symbols: List[str], company_info_map: Dict[str, str]) -> Dict[s
 def create_distributor():
 	"""Return a compiled fixed-logic distributor subgraph."""
 
-	def distributor_node(state: CoordinatorState):
+	def distributor_node(state: DistributorState):
 		strategy_name = str(state.get("strategy") or "").strip()
 		end_date = str(state.get("end_date") or "").strip()
 
@@ -128,7 +130,7 @@ def create_distributor():
 
 		company_profiles = {}
 		for symbol in symbols:
-			company_profiles[symbol] = get_company_info(symbol)
+			company_profiles[symbol] = get_company_by_symbol(symbol)
 
 		tasks = _build_tasks(symbols, company_profiles)
 
@@ -147,7 +149,7 @@ def create_distributor():
 			"company_info_map": company_profiles,
 		}
 
-	sg = StateGraph(CoordinatorState)
+	sg = StateGraph(DistributorState)
 	sg.add_node("distributor", distributor_node)
 	sg.add_edge(START, "distributor")
 	sg.add_edge("distributor", END)

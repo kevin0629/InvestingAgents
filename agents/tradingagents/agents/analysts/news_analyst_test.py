@@ -41,16 +41,12 @@ def create_news_analyst(llm):
             [
                 (
                     "system",
-                    "你是一位新聞分析師，主要任務是 {task}，"
-                    "你的專長是從紛雜的新聞資訊中，提煉出對 {symbol} 股價有實質影響的催化劑。"
+                    "你是一位新聞分析師，主要任務是從紛雜的新聞資訊中，提煉出對 {symbol} 股價有實質影響的催化劑。"
                     "你負責分析非結構化的文字資訊（擴廠、新產能、新技術、新產品、產業趨勢、供應鏈等），"
                     "並將其轉化為對未來股價的影響力評估。\n"
-                    "【資料截止日期】本次分析截止日期為 {end_date}。"
-                    "所有工具呼叫的 end_date 參數皆必須設為 {end_date}，"
+                    "所有工具呼叫的 end_date 參數皆必須設為 {end_date}，為本次資料分析截止日期，"
                     "絕對不得使用超過此日期的任何資料。\n\n"
                     "你可以使用下列工具: {tool_names}\n\n"
-                    "請不要以重複的參數呼叫工具，這樣會導致不必要的資源浪費。\n"
-                    "你務必先使用 `get_company_info` 了解 {symbol} 的基本業務，再根據這些內容下去查相關資料。\n"
                     "每次呼叫 search_news 的 query 格式：「{symbol} + 具體業務關鍵字」。\n"
                     "例如：「{symbol} 擴廠計畫」、「{symbol} 新客戶訂單」、"
                     "「{symbol} 供應鏈缺貨」、「{symbol} 併購案」。\n\n"
@@ -77,13 +73,11 @@ def create_news_analyst(llm):
 
         print("News Analyst received task dict:", task)
         print("News Analyst received end_date:", end_date)
-        print("News Analyst available task", task.task)
         print("News Analyst available symbol", task.symbol)
         print("News Analyst available task_type", task.task_type)
         print("News Analyst available buy_reason", task.buy_reason)
 
         prompt = prompt.partial(
-            task=task.task,
             symbol=task.symbol,
             end_date=end_date,
             task_type=task.task_type,

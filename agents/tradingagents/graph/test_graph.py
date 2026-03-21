@@ -1,10 +1,7 @@
 import json
-import os
 from pathlib import Path
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-
-from langgraph.prebuilt import ToolNode
 
 from tradingagents.agents.utils.execution_logger import AgentExecutionLogger
 from tradingagents.agents.utils.langfuse_tracing import create_langfuse_callback
@@ -19,7 +16,7 @@ from tradingagents.llm_clients import create_llm_client
 class TradingAgentsGraph:
     """
     trading workflow:
-    Coordinator -> Financial, Technical, News -> Critic -> Portfolio Manager.
+    Distributor -> Macro, Financial, Technical, News -> Critic -> Portfolio Manager.
     """
 
     def __init__(
@@ -32,12 +29,12 @@ class TradingAgentsGraph:
         self.config = config or DEFAULT_CONFIG
         self.callbacks = list(callbacks or [])
 
-        langfuse_callback = create_langfuse_callback(
-            trace_name="InvestingAgentsGraph",
-            session_id=self.config.get("langfuse_session_id"),
-        )
-        if langfuse_callback is not None:
-            self.callbacks.append(langfuse_callback)
+        # langfuse_callback = create_langfuse_callback(
+        #     trace_name="InvestingAgentsGraph",
+        #     session_id=self.config.get("langfuse_session_id"),
+        # )
+        # if langfuse_callback is not None:
+        #     self.callbacks.append(langfuse_callback)
 
         set_config(self.config)
 
@@ -144,11 +141,16 @@ class TradingAgentsGraph:
             "company_of_interest": final_state.get("company_of_interest"),
             "end_date": end_date,
             "mode": final_state.get("mode"),
+            "strategy": final_state.get("strategy"),
+            "strategy_description": final_state.get("strategy_description"),
+            "backtest_report": final_state.get("backtest_report"),
+            "company_info_map": final_state.get("company_info_map"),
             "market_regime": final_state.get("market_regime"),
             "coordinator_plan": final_state.get("coordinator_plan"),
             "financial_reports": final_state.get("financial_reports"),
             "technical_reports": final_state.get("technical_reports"),
             "news_reports": final_state.get("news_reports"),
+            "macro_analysis_report": final_state.get("macro_analysis_report"),
             "critic_reflections": final_state.get("critic_reflections"),
             "portfolio_decision": final_state.get("portfolio_decision"),
             "final_trade_decision": final_state.get("final_trade_decision"),

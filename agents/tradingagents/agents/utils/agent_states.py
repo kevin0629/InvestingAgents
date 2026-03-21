@@ -9,10 +9,7 @@ def _last_value(a, b):
     return b if b else a
 
 
-class CoordinatorState(MessagesState):
-    # user_query: str
-    # mode: str
-    # market_situation: str
+class DistributorState(MessagesState):
     end_date: str
     strategy: str
     financial_tasks: Annotated[List[Task], operator.add]
@@ -40,8 +37,7 @@ class NewsState(MessagesState):
 
 class MacroState(MessagesState):
     end_date: str
-    market_situation: str
-    macro_analysis_report: 
+    macro_analysis_report: MacroAnalysisReport
 
 
 class CriticState(MessagesState):
@@ -51,40 +47,30 @@ class CriticState(MessagesState):
     critic_reflections: Annotated[List[str], operator.add]
 
 class PortfolioState(MessagesState):
-    user_query: str
-    mode: str
-    market_situation: str
-    end_date: str
     strategy: str
+    end_date: str
     critic_reflections: List[str]
     # Analysis reports（新標的）
     financial_analysis_reports: List[FinancialAnalysisReport]
     technical_analysis_reports: List[TechnicalAnalysisReport]
     news_analysis_reports: List[NewsAnalysisReport]
-    # Verification reports（庫存股）
-    financial_verification_reports: List[FinancialVerificationReport]
-    technical_verification_reports: List[TechnicalVerificationReport]
-    news_verification_reports: List[NewsVerificationReport]
-    portfolio_decisions: Annotated[List[PortfolioDecision], operator.add]
+    macro_analysis_report: MacroAnalysisReport
 
 class AgentState(MessagesState):
-    # user_query: Annotated[str, "The original user query that initiated the analysis and trading process"]
-    # mode: Annotated[str, "Operation mode: query or strategy"]
-    market_situation: Annotated[str, "Current market situation"]
-    end_date: Annotated[str, _last_value]
-
     strategy: Annotated[str, "Investment strategy to follow, e.g. monthly_revenue_growth_roe"]
+    end_date: Annotated[str, _last_value]
 
     technical_tasks: Annotated[List[Task], operator.add]
     financial_tasks: Annotated[List[Task], operator.add]
     news_tasks: Annotated[List[Task], operator.add]
-
+    
     financial_analysis_reports: Annotated[List[FinancialAnalysisReport], operator.add]
     financial_verification_reports: Annotated[List[FinancialVerificationReport], operator.add]
     technical_analysis_reports: Annotated[List[TechnicalAnalysisReport], operator.add]
     technical_verification_reports: Annotated[List[TechnicalVerificationReport], operator.add]
     news_analysis_reports: Annotated[List[NewsAnalysisReport], operator.add]
     news_verification_reports: Annotated[List[NewsVerificationReport], operator.add]
+    macro_analysis_report: MacroAnalysisReport
     
     critic_reflections: Annotated[List[str], operator.add]
     portfolio_decisions: Annotated[List[PortfolioDecision], operator.add]
