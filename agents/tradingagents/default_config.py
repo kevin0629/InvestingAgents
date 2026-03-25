@@ -15,6 +15,7 @@ DEFAULT_CONFIG = {
     # Provider-specific thinking configuration
     "google_thinking_level": None,      # "high", "minimal", etc.
     "openai_reasoning_effort": None,    # "medium", "high", "low"
+    "anthropic_effort": None,           # "high", "medium", "low"
     # Embedding settings for persistent reflection Agentic RAG
     "embedding_provider": "google",    # Options: openai, google
     "openai_embedding_model": "text-embedding-3-small",
