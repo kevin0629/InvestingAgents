@@ -29,7 +29,7 @@ class Company(Base):
     stock = relationship('Stock', back_populates="company")
     financialReportIndicatorValue = relationship('FinancialReportIndicatorValue', back_populates="company")
     factorValue = relationship('FactorValue', back_populates="company")
-    CompanyNewsRelation = relationship('CompanyNewsRelation', back_populates="company")
+    companyNewsRelation = relationship('CompanyNewsRelation', back_populates="company")
 
 class Period(Base):
     """

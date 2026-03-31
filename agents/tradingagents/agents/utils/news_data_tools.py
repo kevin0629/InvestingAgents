@@ -19,3 +19,42 @@ def search_news(
         str: 包含新聞搜尋結果的格式化字串
     """
     return route_to_vendor("search_news", query, end_date)
+
+
+@tool
+def get_company_news(
+    company_symbol: Annotated[str, "股票代號或公司名稱"],
+    end_date: Annotated[str, "可選的結束日期，格式 yyyy-mm-dd"] = None,
+    look_back_months: Annotated[int, "向前查詢的月份數，預設 1"] = 1,
+) -> str:
+    """
+    取得指定公司的新聞摘要。
+
+    Args:
+        company_symbol (str): 股票代號或公司名稱，例如 2330、台積電
+        end_date (str): 可選的結束日期 (YYYY-MM-DD)
+        look_back_months (int): 向前查詢的月份數
+    Returns:
+        str: 格式化的新聞列表
+    """
+    return route_to_vendor("get_company_news", company_symbol, end_date, look_back_months)
+
+
+@tool
+def get_macro_news(
+    end_date: Annotated[str, "可選的結束日期，格式 yyyy-mm-dd"] = None,
+    look_back_days: Annotated[int, "向前查詢的天數，預設 1"] = 1,
+) -> str:
+    """
+    取得總體/大盤相關新聞摘要。
+
+    Args:
+        end_date (str): 可選的結束日期 (YYYY-MM-DD)
+        look_back_days (int): 向前查詢的天數
+    Returns:
+        str: 格式化的新聞列表
+    """
+    return route_to_vendor("get_macro_news", end_date, look_back_days)
+
+
+

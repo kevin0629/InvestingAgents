@@ -1,7 +1,7 @@
 from typing import Annotated
 
 # Import from vendor-specific modules
-from .news_utils import search_news_for_agent
+from .news_utils import search_news_for_agent, get_company_news, get_macro_news
 from .stock_utils import get_stock_chart, get_taiex_chart
 from .fundamentals_utils import (
     get_company_by_symbol, 
@@ -45,7 +45,9 @@ TOOLS_CATEGORIES = {
         "description": "News data",
         "tools": [
             "get_company_info",
-            "search_news"
+            "search_news",
+            "get_company_news",
+            "get_macro_news"
         ]
     },
     "backtest_data": {
@@ -105,6 +107,12 @@ VENDOR_METHODS = {
     # news_data
     "search_news": {
         "myself": search_news_for_agent,
+    },
+    "get_company_news": {
+        "myself": get_company_news,
+    },
+    "get_macro_news": {
+        "myself": get_macro_news,
     },
     # backtest_data
     "get_strategy": {

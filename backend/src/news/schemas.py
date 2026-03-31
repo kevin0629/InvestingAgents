@@ -17,3 +17,4 @@ class NewsItem(BaseModel):
 class NewsListResponse(BaseModel):
     """新聞列表回應"""
     news_data: List[NewsItem] = Field(..., description="新聞列表")
+    message: Optional[str] = Field(None, description="狀態訊息")
