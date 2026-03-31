@@ -33,6 +33,7 @@ class FactorService:
         Returns a dict with keys factor_name
         """
         mapping = {
+            'EPS': '每股盈餘',
             'CR': '速動比率',
             'DBR': '負債比率',
             'DSI': '存貨週轉天數',

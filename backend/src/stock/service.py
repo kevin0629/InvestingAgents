@@ -512,48 +512,93 @@ class StockService:
     
     def get_stock_river_chart(self) -> io.BytesIO:
         """
-        Generate stock river chart using PE ratio bands and close price
+        Generate stock river chart using PE ratio bands and close price.
+
+        Note: PE is computed from close price and trailing-4-quarter EPS (TTM):
+        PE = Price / EPS_TTM.
+        This avoids fetching/depending on precomputed PE ratio data.
         """
         
         buf = io.BytesIO()
         
         # Get data
         close = self.data.get("price:close")[self.company_symbol]
-        pe = self.data.get("price:pe_ratio")[self.company_symbol]
         
-        # Ensure datetime index
+        # Ensure datetime index + numeric
         close.index = pd.to_datetime(close.index)
-        pe.index = pd.to_datetime(pe.index)
+        close = pd.to_numeric(close, errors='coerce')
         
         # Filter date range
         end_date_dt = pd.to_datetime(self.end_date) if self.end_date else pd.Timestamp(datetime.now())
-        start_date_dt = end_date_dt - pd.DateOffset(years=10) # Show last 10 years
+        start_date_dt = end_date_dt - pd.DateOffset(years=10)  # Show last 10 years only
         close = close[(close.index <= end_date_dt) & (close.index >= start_date_dt)]
-        pe = pe[(pe.index <= end_date_dt) & (pe.index >= start_date_dt)]
+
+        # Build trailing-4-quarter EPS (TTM) from report events, aligned by release_date
+        report_eps_dict = self.data.format_report_data("EPS")
+        if not report_eps_dict or "EPS" not in report_eps_dict:
+            raise ValueError("No EPS report data available")
+
+        eps_events_df = report_eps_dict["EPS"]
+        if self.company_symbol not in eps_events_df.columns:
+            raise ValueError(f"No EPS data found for symbol {self.company_symbol}")
+
+        # eps_events is indexed by (date, release_date)
+        eps_events = eps_events_df[self.company_symbol].dropna().rename("eps").reset_index()
+        if not {"release_date", "eps"}.issubset(set(eps_events.columns)):
+            raise ValueError("Unexpected EPS report data format")
+
+        eps_events["release_date"] = pd.to_datetime(eps_events["release_date"])
+        if "date" in eps_events.columns:
+            eps_events["date"] = pd.to_datetime(eps_events["date"])
+
+        # Keep a bit of history before start_date to allow computing TTM inside the 10Y window
+        eps_events = eps_events[(eps_events["release_date"] <= end_date_dt) & (eps_events["release_date"] >= (start_date_dt - pd.DateOffset(years=2)))]
+
+        # If multiple rows share the same release_date, take the last one
+        sort_cols = [c for c in ["release_date", "date"] if c in eps_events.columns]
+        eps_events = eps_events.sort_values(by=sort_cols)
+        eps_by_release = eps_events.groupby("release_date")["eps"].last().sort_index()
+
+        # TTM EPS = sum of the latest 4 reported quarters available at each release date
+        eps_ttm_by_release = eps_by_release.rolling(window=4, min_periods=4).sum()
+
+        # Align to close trading calendar using only available information up to that date
+        eps_ttm_daily = eps_ttm_by_release.reindex(close.index, method="ffill")
 
         # Resample to monthly frequency
         close = close.resample('M').last() # Monthly frequency, take last value of the month
-        pe = pe.resample('M').last() # Monthly frequency, take last value of the month
+        eps_ttm = eps_ttm_daily.resample('M').last() # Monthly frequency
         
-        # Combine and clean data
-        data = pd.DataFrame({'close': close, 'pe': pe})
-        data = data.dropna()
-        
-        if len(data) < 10:
+        # Combine monthly data (do NOT drop EPS<=0; we still want to plot close)
+        data_full = pd.DataFrame({'close': close, 'eps': eps_ttm})
+        data_full = data_full.dropna(subset=['close'])
+
+        if len(data_full) < 10:
             raise ValueError("Insufficient data for PE river chart (need at least 10 months)")
+
+        # Compute PE only when EPS_TTM > 0; otherwise keep NaN so river is not drawn
+        valid_mask = data_full['eps'].notna() & (data_full['eps'] > 0) & data_full['close'].notna()
+        data_full['pe'] = np.nan
+        data_full.loc[valid_mask, 'pe'] = data_full.loc[valid_mask, 'close'] / data_full.loc[valid_mask, 'eps']
+        data_full = data_full.replace([np.inf, -np.inf], np.nan)
+
+        # Determine whether we have enough valid months to draw river bands
+        valid_pe = data_full['pe'].dropna()
+        has_river = len(valid_pe) >= 10
         
-        # Calculate EPS from close price and PE ratio (EPS = Price / PE)
-        data['eps'] = data['close'] / data['pe']
-        
-        # Get historical PE min and max (extreme values)
-        pe_min = data['pe'].min()
-        pe_max = data['pe'].max()
-        
-        # Divide into 6 bands (5 equal divisions between min and max)
-        # This creates 6 PE threshold lines
-        pe_lines = np.linspace(pe_min, pe_max, 6)
+        pe_lines = None
+        if has_river:
+            # Get historical PE min and max (extreme values) from valid segments only
+            pe_min = valid_pe.min()
+            pe_max = valid_pe.max()
+
+            # Divide into 6 bands (5 equal divisions between min and max)
+            # This creates 6 PE threshold lines
+            pe_lines = np.linspace(pe_min, pe_max, 6)
         
         # Create figure
+        plt.rcParams['font.family'] = 'Microsoft JhengHei'
+        plt.rcParams['axes.unicode_minus'] = False
         fig, ax = plt.subplots(figsize=(19.2, 10.8))
         
         # Define colors for PE bands (gradient from cool to warm, 5 colors for 5 bands)
@@ -576,32 +621,58 @@ class StockService:
         ]
         
         # Plot PE bands (fill between) - using price = EPS × PE
-        x = data.index
-        
-        # Draw 5 bands between 6 PE lines
-        for i in range(5):
-            pe_lower = pe_lines[i]
-            pe_upper = pe_lines[i + 1]
-            
-            # Calculate price bands: Price = EPS × PE
-            price_lower = data['eps'] * pe_lower
-            price_upper = data['eps'] * pe_upper
-            
-            ax.fill_between(
-                x, 
-                price_lower, 
-                price_upper,
-                color=band_colors[i],
-                alpha=0.7
-            )
-        
-        # Draw 6 PE boundary lines with labels (solid lines with colors related to adjacent bands)
-        for i, pe_val in enumerate(pe_lines):
-            price_line = data['eps'] * pe_val
-            ax.plot(x, price_line, color=line_colors[i], linewidth=1.5, alpha=0.9, linestyle='-', label=f'PE {pe_val:.1f}')
-        
-        # Plot actual close price (bold line on top)
-        ax.plot(x, data['close'], color='#1f4788', linewidth=2.5, label='Close Price', zorder=10)
+        x = data_full.index
+
+        last_close_idx = data_full['close'].last_valid_index()
+        last_close_val = float(data_full.loc[last_close_idx, 'close']) if last_close_idx is not None else np.nan
+
+        end_month_idx = data_full.index.max() if len(data_full.index) else None
+        end_eps_val = float(data_full.loc[end_month_idx, 'eps']) if end_month_idx is not None and pd.notna(data_full.loc[end_month_idx, 'eps']) else np.nan
+        show_pe_legend_value = (not np.isnan(end_eps_val)) and (end_eps_val > 0)
+
+        if has_river and pe_lines is not None:
+            # Draw 5 bands between 6 PE lines (only where EPS_TTM>0)
+            for i in range(5):
+                pe_lower = pe_lines[i]
+                pe_upper = pe_lines[i + 1]
+
+                # Calculate price bands: Price = EPS × PE
+                price_lower = data_full['eps'] * pe_lower
+                price_upper = data_full['eps'] * pe_upper
+
+                ax.fill_between(
+                    x,
+                    price_lower,
+                    price_upper,
+                    where=valid_mask,
+                    interpolate=True,
+                    color=band_colors[i],
+                    alpha=0.7
+                )
+
+            # Draw 6 PE boundary lines with labels (only where EPS_TTM>0)
+            for i, pe_val in enumerate(pe_lines):
+                price_line = (data_full['eps'] * pe_val).where(valid_mask)
+
+                # Legend numeric value should only be shown when end_date EPS_TTM > 0
+                if show_pe_legend_value:
+                    label = f'{pe_val:.1f}倍: {(end_eps_val * float(pe_val)):.2f}'
+                else:
+                    label = f'{pe_val:.1f}倍'
+
+                ax.plot(
+                    x,
+                    price_line,
+                    color=line_colors[i],
+                    linewidth=1.5,
+                    alpha=0.9,
+                    linestyle='-',
+                    label=label
+                )
+
+        # Plot actual close price (always)
+        close_label_val = "N/A" if np.isnan(last_close_val) else f"{last_close_val:.2f}"
+        ax.plot(x, data_full['close'], color='#1f4788', linewidth=2.5, label=f'close: {close_label_val}', zorder=10)
         
         # Formatting
         ax.set_title(f'{self.company_symbol} PE River Chart', fontsize=20, fontweight='bold', pad=20)

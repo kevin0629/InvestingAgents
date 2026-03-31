@@ -4,6 +4,7 @@ import importlib
 from functools import lru_cache
 from typing import Optional, Dict, Any, Literal, List
 from .utils import get_backend_base_url
+from datetime import datetime
 
 
 # Taiwanese / Chinese financial news sites — Tavily will prefer these domains
@@ -86,6 +87,7 @@ def get_company_news(
     for item in data:
         title = item.get("title", "(無標題)")
         published_at = item.get("published_at", "")
+        published_at = datetime.fromisoformat(published_at).strftime("%Y-%m-%d") if published_at else ""
         content = item.get("content", "").strip() or "(無內容)"
         sections.append(
             f"## {title}\n"
@@ -124,6 +126,7 @@ def get_macro_news(
     for item in data:
         title = item.get("title", "(無標題)")
         published_at = item.get("published_at", "")
+        published_at = datetime.fromisoformat(published_at).strftime("%Y-%m-%d") if published_at else ""
         content = item.get("content", "").strip() or "(無內容)"
         sections.append(
             f"## {title}\n"
@@ -231,3 +234,8 @@ def search_news_for_agent(
         lines.append("")
 
     return "\n".join(lines)
+
+
+if __name__ == "__main__":
+    # print(get_company_news("2455", "2024-06-01", look_back_months=3))
+    print(get_macro_news("2024-06-01", look_back_days=1))
