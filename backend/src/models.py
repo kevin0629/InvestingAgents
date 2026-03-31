@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Float, BigInteger, Date
+from sqlalchemy import Column, Integer, String, ForeignKey, Float, BigInteger, Date, DateTime
 from sqlalchemy.orm import registry
 from sqlalchemy.orm import relationship
 
@@ -26,11 +26,10 @@ class Company(Base):
     exchange_name = Column(String(50), nullable=False)
     country = Column(String(50), nullable=False)
     
-    # 第一個參數是你要對應到的class名稱，back_populates 是在他的class 裡面你的變數名稱(通常都是小寫的class名)
     stock = relationship('Stock', back_populates="company")
     financialReportIndicatorValue = relationship('FinancialReportIndicatorValue', back_populates="company")
     factorValue = relationship('FactorValue', back_populates="company")
-    # chips = relationship('Chips', back_populates="company")
+    CompanyNewsRelation = relationship('CompanyNewsRelation', back_populates="company")
 
 class Period(Base):
     """
@@ -152,6 +151,43 @@ class AdjustedTaiex(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     date = Column(Date, nullable=False)
     close = Column(Float)
+
+class CompanyNews(Base):
+    """
+    公司新聞資訊
+    """
+    __tablename__ = 'companynews'
+    id = Column(String(100), primary_key=True)
+    title = Column(String(500), nullable=False)
+    content = Column(String(10000), nullable=False)
+    published_at = Column(DateTime, nullable=False)
+    link = Column(String(500), nullable=False)
+
+    companyNewsRelation = relationship('CompanyNewsRelation', back_populates="companyNews")
+
+
+class CompanyNewsRelation(Base):
+    """
+    公司新聞關係
+    """
+    __tablename__ = 'companynewsrelation'
+    news_id = Column(String(100), ForeignKey('companynews.id'), primary_key=True)
+    company_id = Column(Integer, ForeignKey('company.id'), primary_key=True)
+
+    company = relationship('Company', back_populates="companyNewsRelation")
+    companyNews = relationship('CompanyNews', back_populates="companyNewsRelation")
+
+
+class MacroNews(Base):
+    """
+    宏觀新聞資訊
+    """
+    __tablename__ = 'macronews'
+    id = Column(String(100), primary_key=True)
+    title = Column(String(500), nullable=False)
+    content = Column(String(10000), nullable=False)
+    published_at = Column(DateTime, nullable=False)
+    link = Column(String(500), nullable=False)
 
 
 # class Chips(Base):

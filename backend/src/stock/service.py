@@ -527,8 +527,9 @@ class StockService:
         
         # Filter date range
         end_date_dt = pd.to_datetime(self.end_date) if self.end_date else pd.Timestamp(datetime.now())
-        close = close[(close.index <= end_date_dt)]
-        pe = pe[(pe.index <= end_date_dt)]
+        start_date_dt = end_date_dt - pd.DateOffset(years=10) # Show last 10 years
+        close = close[(close.index <= end_date_dt) & (close.index >= start_date_dt)]
+        pe = pe[(pe.index <= end_date_dt) & (pe.index >= start_date_dt)]
 
         # Resample to monthly frequency
         close = close.resample('M').last() # Monthly frequency, take last value of the month
