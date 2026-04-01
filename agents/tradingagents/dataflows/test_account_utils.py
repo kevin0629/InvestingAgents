@@ -16,19 +16,18 @@ from tradingagents.dataflows.config import get_config
 
 def run_account_utils_tests() -> None:
     config = get_config()
-    strategy = f"test_strategy_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    strategy = f"test_strategy_{datetime.now().strftime('%Y%m%d')}"
     strategy_dir = os.path.join(config["project_dir"], "dataflows", "data_cache", strategy)
-
-    print(f"[TEST] strategy = {strategy}")
 
     # 1) 初始化銀行帳戶
     init_msg = init_bank_account(date="2025-02-01", strategy=strategy, bank_balance=1000000)
-    assert "已初始化" in init_msg
+    assert init_msg["status"] == "success"
 
     # 2) 第一次先跑 update_stock_holding：此時沒有 signal，應回 error 且 holding 應是空檔
-    first_update = update_stock_holding(strategy=strategy, signal_date="2025-02-03")
-    assert first_update["status"] == "error"
-    assert "找不到 signal 檔" in first_update["message"]
+    first_update = update_stock_holding(strategy=strategy, signal_date="2025-02-03", trade_modes=["custom_weight"])
+    assert first_update["status"] == "partial_success"
+    assert first_update["mode_results"]["custom_weight"]["status"] == "error"
+    assert "找不到 signal 檔" in first_update["mode_results"]["custom_weight"]["message"]
 
     empty_holding = get_stock_account(strategy=strategy)
     assert empty_holding["status"] == "success"
@@ -44,10 +43,11 @@ def run_account_utils_tests() -> None:
     assert abs(signal_result["position_sum"] - 0.6) < 1e-9
 
     # 4) 第一輪更新 holding
-    update_result_1 = update_stock_holding(strategy=strategy, signal_date="2025-02-03")
+    update_result_1 = update_stock_holding(strategy=strategy, signal_date="2025-02-03", trade_modes=["custom_weight"])
     assert update_result_1["status"] == "success"
-    assert update_result_1["holding_count"] == 2
-    assert update_result_1["backup_file"] == ""
+    mode_result_1 = update_result_1["mode_results"]["custom_weight"]
+    assert mode_result_1["holding_count"] == 2
+    assert mode_result_1["backup_file"] == ""
 
     holding_after_1 = get_stock_account(strategy=strategy)
     assert holding_after_1["row_count"] == 2
@@ -69,10 +69,11 @@ def run_account_utils_tests() -> None:
     assert any(name == "signal_2025-02-03.csv" for name in files_now)
 
     # 6) 第二輪更新 holding（更新前應備份 holding）
-    update_result_2 = update_stock_holding(strategy=strategy, signal_date="2025-03-03")
+    update_result_2 = update_stock_holding(strategy=strategy, signal_date="2025-03-03", trade_modes=["custom_weight"])
     assert update_result_2["status"] == "success"
-    assert update_result_2["backup_file"] != ""
-    assert os.path.exists(update_result_2["backup_file"])
+    mode_result_2 = update_result_2["mode_results"]["custom_weight"]
+    assert mode_result_2["backup_file"] != ""
+    assert os.path.exists(mode_result_2["backup_file"])
 
     holding_after_2 = get_stock_account(strategy=strategy)
     assert holding_after_2["status"] == "success"

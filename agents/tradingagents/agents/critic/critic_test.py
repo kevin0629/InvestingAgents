@@ -21,7 +21,8 @@ def create_critic(llm):
         reports_summary = (
             f"財務驗證報告:\n{state.get('financial_verification_reports')}\n\n"
             f"技術驗證報告:\n{state.get('technical_verification_reports')}\n\n"
-            f"新聞驗證報告:\n{state.get('news_verification_reports')}"
+            f"新聞驗證報告:\n{state.get('news_verification_reports')}\n\n"
+            f"宏觀報告:\n{state.get('macro_verification_reports')}\n\n"
         )
 
         prompt = ChatPromptTemplate.from_messages(
