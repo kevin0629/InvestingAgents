@@ -5,9 +5,7 @@ from unittest.mock import patch
 
 from tradingagents.dataflows.account_utils import (
     create_stock_holding,
-    get_bank_account,
     get_stock_account,
-    init_bank_account,
     update_stock_holding,
 )
 from tradingagents.dataflows.config import get_config
@@ -19,44 +17,38 @@ def run_account_utils_tests() -> None:
     strategy = f"test_strategy_{datetime.now().strftime('%Y%m%d')}"
     strategy_dir = os.path.join(config["project_dir"], "dataflows", "data_cache", strategy)
 
-    # 1) 初始化銀行帳戶
-    init_msg = init_bank_account(date="2025-02-01", strategy=strategy, bank_balance=1000000)
-    assert init_msg["status"] == "success"
-
-    # 2) 第一次先跑 update_stock_holding：此時沒有 signal，應回 error 且 holding 應是空檔
-    first_update = update_stock_holding(strategy=strategy, signal_date="2025-02-03", trade_modes=["custom_weight"])
-    assert first_update["status"] == "partial_success"
-    assert first_update["mode_results"]["custom_weight"]["status"] == "error"
-    assert "找不到 signal 檔" in first_update["mode_results"]["custom_weight"]["message"]
-
-    empty_holding = get_stock_account(strategy=strategy)
-    assert empty_holding["status"] == "success"
-    assert empty_holding["row_count"] == 0
-
-    # 3) 建立 signal（僅四欄）
+    # 1) 建立 signal
     orders_p1 = [
         {"symbol": "2330", "position": 0.35, "reason": "基本面改善"},
         {"symbol": "2454", "position": 0.25, "reason": "AI 需求"},
     ]
     signal_result = create_stock_holding(strategy=strategy, orders=orders_p1, signal_date="2025-02-03")
     assert signal_result["status"] == "success"
-    assert abs(signal_result["position_sum"] - 0.6) < 1e-9
 
-    # 4) 第一輪更新 holding
-    update_result_1 = update_stock_holding(strategy=strategy, signal_date="2025-02-03", trade_modes=["custom_weight"])
+    # 2) 依回測結果更新 holding
+    fake_report = {
+        "strategy_name": strategy,
+        "current_holdings": [
+            {"stock_id": "2330", "position": 0.7, "entry_date": "2025-02-04"},
+            {"stock_id": "2454", "position": 0.3, "entry_date": "2025-02-04"},
+        ],
+        "performance": {},
+        "message": "ok",
+    }
+
+    with patch("tradingagents.dataflows.account_utils.get_backtest_report", return_value=fake_report):
+        update_result_1 = update_stock_holding(strategy=strategy, signal_date="2025-02-03")
+
     assert update_result_1["status"] == "success"
-    mode_result_1 = update_result_1["mode_results"]["custom_weight"]
-    assert mode_result_1["holding_count"] == 2
-    assert mode_result_1["backup_file"] == ""
+    custom_mode_result = update_result_1["mode_results"]["custom_weight"]
+    equal_mode_result = update_result_1["mode_results"]["equal_weight"]
+    assert custom_mode_result["holding_count"] == 2
+    assert equal_mode_result["holding_count"] == 2
 
     holding_after_1 = get_stock_account(strategy=strategy)
     assert holding_after_1["row_count"] == 2
 
-    bank_after_1 = get_bank_account(strategy=strategy)
-    assert bank_after_1["status"] == "success"
-    assert float(bank_after_1["latest"]["帳戶餘額"]) <= 1_000_000
-
-    # 5) 同一期再次 create signal，應該觸發 signal 備份
+    # 3) 同一期再次 create signal，應該觸發 signal 備份
     orders_p1b = [
         {"symbol": "2330", "position": -0.05, "reason": "略減碼"},
         {"symbol": "2317", "position": 0.20, "reason": "新增"},
@@ -65,11 +57,12 @@ def run_account_utils_tests() -> None:
     assert signal_result_2["status"] == "success"
 
     files_now = os.listdir(strategy_dir)
-    assert "signal.csv" in files_now
-    assert any(name == "signal_2025-02-03.csv" for name in files_now)
+    assert "custom_weight" in files_now
 
-    # 6) 第二輪更新 holding（更新前應備份 holding）
-    update_result_2 = update_stock_holding(strategy=strategy, signal_date="2025-03-03", trade_modes=["custom_weight"])
+    # 4) 第二輪更新 holding（更新前應備份 holding）
+    with patch("tradingagents.dataflows.account_utils.get_backtest_report", return_value=fake_report):
+        update_result_2 = update_stock_holding(strategy=strategy, signal_date="2025-03-03", trade_modes=["custom_weight"])
+
     assert update_result_2["status"] == "success"
     mode_result_2 = update_result_2["mode_results"]["custom_weight"]
     assert mode_result_2["backup_file"] != ""

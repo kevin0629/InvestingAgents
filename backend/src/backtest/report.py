@@ -293,29 +293,19 @@ class Report():
         mr = monthly_returns
 
         for idx in mr.index:
-            if idx.year not in self.return_table:
-                self.return_table[idx.year] = {
-                    1: 0,
-                    2: 0,
-                    3: 0,
-                    4: 0,
-                    5: 0,
-                    6: 0,
-                    7: 0,
-                    8: 0,
-                    9: 0,
-                    10: 0,
-                    11: 0,
-                    12: 0,
-                }
+            # use string keys for months to avoid mixed-type index issues in pandas
+            year_key = idx.year
+            if year_key not in self.return_table:
+                # initialize months as strings '1'..'12'
+                self.return_table[year_key] = {str(m): 0 for m in range(1, 13)}
             if not np.isnan(mr[idx]):
-                self.return_table[idx.year][idx.month] = mr[idx]
+                self.return_table[year_key][str(idx.month)] = mr[idx]
         # add first month
         fidx = mr.index[0]
         try:
-            self.return_table[fidx.year][fidx.month] = float(mp.iloc[0]) / dp.iloc[0] - 1
+            self.return_table[fidx.year][str(fidx.month)] = float(mp.iloc[0]) / dp.iloc[0] - 1
         except ZeroDivisionError:
-            self.return_table[fidx.year][fidx.month] = 0
+            self.return_table[fidx.year][str(fidx.month)] = 0
         # calculate the YTD values
         for idx in self.return_table:
             arr = np.array(list(self.return_table[idx].values()))

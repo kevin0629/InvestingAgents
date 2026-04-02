@@ -130,7 +130,15 @@ def sim(position: Union[pd.DataFrame, pd.Series],
         open_.index = pd.to_datetime(open_.index)
 
     assert len(position.shape) >= 2
-    delta_time_rebalance = position.index[-1] - position.index[-3]
+    # delta_time_rebalance = position.index[-1] - position.index[-3]
+
+    if len(position.index) >= 3:
+        delta_time_rebalance = position.index[-1] - position.index[-3]
+    elif len(position.index) == 2:
+        delta_time_rebalance = position.index[-1] - position.index[0]
+    else:
+        raise ValueError("`position` needs at least 2 dates for backtesting")
+
     backtest_to_end = position.index[-1] + \
         delta_time_rebalance > price.index[-1]
 

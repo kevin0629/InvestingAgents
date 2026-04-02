@@ -2,14 +2,13 @@ import os
 import re
 import shutil
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
 from .config import get_config
-from .stock_utils import get_next_trading_day_close_price
+from .backtest_utils import get_backtest_report
 
-BANK_HEADERS = ["日期", "帳戶餘額"]
 SIGNAL_HEADERS = ["stock", "position", "entry_sig_date"]
 HOLDING_HEADERS = [
     "stock",
@@ -57,10 +56,6 @@ def _mode_dir(strategy: str, trade_mode: str) -> str:
     return mode_dir
 
 
-def _bank_csv_path(strategy: str, trade_mode: str) -> str:
-    return os.path.join(_mode_dir(strategy, trade_mode), "bank_account.csv")
-
-
 def _signal_csv_path(strategy: str, trade_mode: str) -> str:
     return os.path.join(_mode_dir(strategy, trade_mode), "signal.csv")
 
@@ -92,76 +87,34 @@ def _read_csv_rows(path: str, headers: List[str]) -> List[Dict[str, Any]]:
     return dataframe.to_dict(orient="records")
 
 
-def _write_bank_row(strategy: str, trade_mode: str, date: str, bank_balance: float) -> None:
-    path = _bank_csv_path(strategy, trade_mode)
-    dataframe = _read_csv_df(path, BANK_HEADERS)
-    new_row = pd.DataFrame([{"日期": date, "帳戶餘額": float(bank_balance)}], columns=BANK_HEADERS)
-    updated_df = pd.concat([dataframe, new_row], ignore_index=True)
-    updated_df.to_csv(path, index=False, encoding="utf-8-sig")
-
-
-def _init_mode_bank_account(date: str, strategy: str, trade_mode: str, bank_balance: float) -> Dict[str, Any]:
-    path = _bank_csv_path(strategy, trade_mode)
-    dataframe = pd.DataFrame([{"日期": date, "帳戶餘額": float(bank_balance)}], columns=BANK_HEADERS)
-    dataframe.to_csv(path, index=False, encoding="utf-8-sig")
-    return {
-        "status": "success",
-        "trade_mode": trade_mode,
-        "file_path": path,
-        "latest": {"日期": date, "帳戶餘額": float(bank_balance)},
-    }
-
-
-def init_bank_account(
-    date: str,
-    strategy: str,
-    bank_balance: int = 1_000_000,
-    trade_modes: Optional[List[str]] = None,
-) -> Dict[str, Any]:
-    modes = trade_modes or TRADE_MODES
-    results = [_init_mode_bank_account(date=date, strategy=strategy, trade_mode=mode, bank_balance=bank_balance) for mode in modes]
-    return {
-        "status": "success",
-        "message": f"策略 {strategy} 已初始化 {len(results)} 個銀行帳戶",
-        "strategy": strategy,
-        "trade_modes": modes,
-        "results": results,
-    }
-
-
-def get_bank_account(strategy: str, trade_mode: str = "custom_weight") -> Dict[str, Any]:
-    path = _bank_csv_path(strategy, trade_mode)
-    rows = _read_csv_rows(path, BANK_HEADERS)
-    latest = rows[-1] if rows else {"日期": "", "帳戶餘額": 0}
-    return {
-        "status": "success",
-        "trade_mode": trade_mode,
-        "file_path": path,
-        "latest": latest,
-        "row_count": len(rows),
-        "rows": rows,
-    }
-
-
-def update_bank_account(date: str, strategy: str, bank_balance: float, trade_mode: str = "custom_weight") -> Dict[str, Any]:
-    _write_bank_row(strategy=strategy, trade_mode=trade_mode, date=date, bank_balance=bank_balance)
-    snapshot = get_bank_account(strategy, trade_mode=trade_mode)
-    return {
-        "status": "success",
-        "message": f"策略 {strategy} ({trade_mode}) 銀行帳戶已更新",
-        "trade_mode": trade_mode,
-        "file_path": snapshot["file_path"],
-        "latest": snapshot["latest"],
-        "row_count": snapshot["row_count"],
-    }
-
-
 def _validate_date(date_str: str, field_name: str) -> Optional[str]:
     try:
         datetime.strptime(date_str, "%Y-%m-%d")
     except ValueError:
         return f"{field_name} 格式錯誤，需為 YYYY-MM-DD"
     return None
+
+
+def _resolve_modes(trade_mode: Optional[str] = None, trade_modes: Optional[List[str]] = None) -> Tuple[List[str], Dict[str, Dict[str, Any]]]:
+    if trade_modes is not None:
+        modes = trade_modes
+    elif trade_mode is not None:
+        modes = [trade_mode]
+    else:
+        modes = TRADE_MODES
+
+    mode_errors: Dict[str, Dict[str, Any]] = {}
+    valid_modes: List[str] = []
+    for mode in modes:
+        if mode in TRADE_MODES:
+            valid_modes.append(mode)
+        else:
+            mode_errors[mode] = {
+                "status": "error",
+                "message": f"不支援的 trade_mode: {mode}",
+                "trade_mode": mode,
+            }
+    return valid_modes, mode_errors
 
 
 def _normalize_orders(orders: List[Dict[str, Any]], signal_date: str) -> List[Dict[str, Any]]:
@@ -252,57 +205,34 @@ def create_stock_holding(
     strategy: str,
     orders: List[Dict[str, Any]],
     signal_date: str,
-    trade_mode: str = "custom_weight",
+    trade_mode: Optional[str] = None,
+    trade_modes: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
-    """建立單一交易模式的 signal CSV。"""
-    return _create_signal_csv(strategy=strategy, trade_mode=trade_mode, orders=orders, signal_date=signal_date)
+    """建立 signal CSV。預設同時建立 equal_weight 與 custom_weight 兩種模式。"""
+    date_error = _validate_date(signal_date, "signal_date")
+    if date_error:
+        return {"status": "error", "message": date_error}
 
-    if not isinstance(orders, list) or len(orders) == 0:
-        return {"status": "error", "message": "orders 必須是非空 List[Dict]", "file_path": signal_path}
+    modes, mode_errors = _resolve_modes(trade_mode=trade_mode, trade_modes=trade_modes)
+    mode_results: Dict[str, Any] = {**mode_errors}
 
-    try:
-        datetime.strptime(signal_date, "%Y-%m-%d")
-    except ValueError:
-        return {"status": "error", "message": "signal_date 格式錯誤，需為 YYYY-MM-DD", "file_path": signal_path}
+    for mode in modes:
+        mode_results[mode] = _create_signal_csv(
+            strategy=strategy,
+            trade_mode=mode,
+            orders=orders,
+            signal_date=signal_date,
+        )
 
-    payload_rows: List[Dict[str, Any]] = []
-    position_sum = 0.0
-    for index, order in enumerate(orders):
-        if not isinstance(order, dict):
-            return {"status": "error", "message": f"orders[{index}] 必須是 Dict", "file_path": signal_path}
-        if "symbol" not in order or "position" not in order:
-            return {"status": "error", "message": f"orders[{index}] 缺少 symbol 或 position", "file_path": signal_path}
-
-        try:
-            symbol = str(order.get("symbol", "")).strip()
-            position = float(order.get("position"))
-            reason = str(order.get("reason", ""))
-        except Exception:
-            return {"status": "error", "message": f"orders[{index}] 格式錯誤", "file_path": signal_path}
-
-        if not symbol:
-            return {"status": "error", "message": f"orders[{index}] symbol 不可為空", "file_path": signal_path}
-        position_sum += position
-        payload_rows.append({"商品": symbol, "部位": position, "訊號日期": signal_date, "買入理由": reason})
-
-    if os.path.exists(signal_path):
-        old_df = pd.read_csv(signal_path, encoding="utf-8-sig")
-        old_signal_date = signal_date
-        if not old_df.empty and "訊號日期" in old_df.columns:
-            old_signal_date = str(old_df.iloc[0].get("訊號日期", signal_date))
-        backup_path = os.path.join(_strategy_dir(strategy), f"signal_{old_signal_date}.csv")
-        shutil.copyfile(signal_path, backup_path)
-
-    signal_df = pd.DataFrame(payload_rows, columns=SIGNAL_HEADERS)
-    signal_df.to_csv(signal_path, index=False, encoding="utf-8-sig")
-
+    success_count = sum(1 for result in mode_results.values() if result.get("status") == "success")
+    status = "success" if success_count == len(mode_results) else "partial_success"
     return {
-        "status": "success",
-        "message": f"策略 {strategy} signal 已建立，共 {len(payload_rows)} 檔",
-        "file_path": signal_path,
-        "updated_count": len(payload_rows),
-        "position_sum": round(position_sum, 6),
-        "updated_symbols": [row["商品"] for row in payload_rows],
+        "status": status,
+        "strategy": strategy,
+        "signal_date": signal_date,
+        "trade_modes": list(mode_results.keys()),
+        "success_count": success_count,
+        "mode_results": mode_results,
     }
 
 
@@ -336,151 +266,114 @@ def get_stock_account(strategy: str) -> Dict[str, Any]:
     }
 
 
-def _apply_signal_to_holding(strategy: str, trade_mode: str, signal_date: str, bank_balance: float) -> Dict[str, Any]:
+def _build_holding_rows_from_backtest(current_holdings: List[Dict[str, Any]], signal_date: str, trade_mode: str) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+
+    for index, holding in enumerate(current_holdings):
+        if not isinstance(holding, dict):
+            raise ValueError(f"current_holdings[{index}] 格式錯誤，必須是 Dict")
+
+        stock = str(holding.get("stock_id") or holding.get("stock") or "").strip()
+        if not stock:
+            raise ValueError(f"current_holdings[{index}] 缺少 stock_id")
+
+        raw_position = holding.get("position", 0)
+        try:
+            position = float(raw_position or 0)
+        except (TypeError, ValueError):
+            raise ValueError(f"current_holdings[{index}] position 無法轉為數值")
+
+        entry_date = str(holding.get("entry_date") or signal_date).strip()[:10]
+        if _validate_date(entry_date, f"current_holdings[{index}].entry_date"):
+            entry_date = signal_date
+
+        parsed_sig = datetime.strptime(signal_date, "%Y-%m-%d")
+        parsed_entry = datetime.strptime(entry_date, "%Y-%m-%d")
+        period = max((parsed_entry - parsed_sig).days, 0)
+
+        rows.append(
+            {
+                "stock": stock,
+                "entry_sig_date": signal_date,
+                "exit_sig_date": "",
+                "entry_date": entry_date,
+                "exit_date": "",
+                "period": int(period),
+                "position": round(position, 6),
+                "return": 0.0,
+                "mdd": 0.0,
+                "mae": 0.0,
+                "gmfe": 0.0,
+                "bmfe": 0.0,
+            }
+        )
+
+    rows = [row for row in rows if row["position"] > 0]
+    if trade_mode.startswith("equal_weight") and rows:
+        equal_position = round(1.0 / len(rows), 6)
+        for row in rows:
+            row["position"] = equal_position
+
+    total_position = sum(row["position"] for row in rows)
+    if rows and total_position > 1.000001:
+        normalized_ratio = 1.0 / total_position
+        for row in rows:
+            row["position"] = round(row["position"] * normalized_ratio, 6)
+
+    return rows
+
+
+def _apply_backtest_to_holding(
+    strategy: str,
+    trade_mode: str,
+    signal_date: str,
+    report_data: Dict[str, Any],
+) -> Dict[str, Any]:
     mode_dir = _mode_dir(strategy, trade_mode)
     signal_path = _signal_csv_path(strategy, trade_mode)
     holding_path = _holding_csv_path(strategy, trade_mode)
 
     _ensure_csv_with_header(holding_path, HOLDING_HEADERS)
-    if not os.path.exists(signal_path):
-        return {
-            "status": "error",
-            "message": f"找不到 signal 檔：{os.path.basename(signal_path)}",
-            "trade_mode": trade_mode,
-            "signal_file": signal_path,
-            "holding_file": holding_path,
-        }
-
-    signal_df = pd.read_csv(signal_path, encoding="utf-8-sig")
-    if signal_df.empty:
-        return {
-            "status": "error",
-            "message": "signal 檔為空，無法更新 holding",
-            "trade_mode": trade_mode,
-            "signal_file": signal_path,
-            "holding_file": holding_path,
-        }
-
-    for required_col in SIGNAL_HEADERS:
-        if required_col not in signal_df.columns:
-            return {
-                "status": "error",
-                "message": f"signal 缺少欄位：{required_col}",
-                "trade_mode": trade_mode,
-                "signal_file": signal_path,
-                "holding_file": holding_path,
-            }
-
-    bank_path = _bank_csv_path(strategy, trade_mode)
-    if not os.path.exists(bank_path):
-        _init_mode_bank_account(date=signal_date, strategy=strategy, trade_mode=trade_mode, bank_balance=bank_balance)
-
-    holding_df = _read_csv_df(holding_path, HOLDING_HEADERS)
+    existing_holding_df = _read_csv_df(holding_path, HOLDING_HEADERS)
 
     backup_file = ""
-    if not holding_df.empty:
+    if not existing_holding_df.empty:
         backup_file = os.path.join(mode_dir, f"holding_account_{signal_date}.csv")
         shutil.copyfile(holding_path, backup_file)
 
-    for _, row in signal_df.iterrows():
-        stock = str(row["stock"]).strip()
-        delta_position = float(row["position"])
-        entry_sig_date = str(row.get("entry_sig_date", signal_date)).strip()
+    current_holdings = report_data.get("current_holdings", []) if isinstance(report_data, dict) else []
 
-        match_idx = holding_df.index[holding_df["stock"] == stock].tolist()
-        if match_idx:
-            idx = match_idx[0]
-            old_position = float(holding_df.at[idx, "position"] or 0)
-            holding_df.at[idx, "position"] = old_position + delta_position
-            holding_df.at[idx, "entry_sig_date"] = entry_sig_date
-            holding_df.at[idx, "exit_sig_date"] = ""
-            holding_df.at[idx, "exit_date"] = ""
-        else:
-            new_row = {col: "" for col in HOLDING_HEADERS}
-            new_row["stock"] = stock
-            new_row["entry_sig_date"] = entry_sig_date
-            new_row["position"] = delta_position
-            new_row["period"] = 0
-            new_row["return"] = 0.0
-            new_row["mdd"] = 0.0
-            new_row["mae"] = 0.0
-            new_row["gmfe"] = 0.0
-            new_row["bmfe"] = 0.0
-            holding_df = pd.concat([holding_df, pd.DataFrame([new_row], columns=HOLDING_HEADERS)], ignore_index=True)
-
-    holding_df["position"] = pd.to_numeric(holding_df["position"], errors="coerce").fillna(0.0)
-    holding_df = holding_df[holding_df["position"] > 0].copy()
-    total_position = float(holding_df["position"].sum()) if not holding_df.empty else 0.0
-    if total_position > 1:
-        return {
-            "status": "error",
-            "message": f"更新後部位加總不可超過 1，目前為 {round(total_position, 6)}",
-            "trade_mode": trade_mode,
-            "signal_file": signal_path,
-            "holding_file": holding_path,
-            "backup_file": backup_file,
-        }
-
-    bank_snapshot = get_bank_account(strategy=strategy, trade_mode=trade_mode)
-    old_bank_balance = float(bank_snapshot["latest"].get("帳戶餘額", 0) or 0)
-    if old_bank_balance <= 0 and bank_balance > 0:
-        _init_mode_bank_account(date=signal_date, strategy=strategy, trade_mode=trade_mode, bank_balance=bank_balance)
-        bank_snapshot = get_bank_account(strategy=strategy, trade_mode=trade_mode)
-        old_bank_balance = float(bank_snapshot["latest"].get("帳戶餘額", 0) or 0)
-
-    invested_amount = 0.0
-    for idx in holding_df.index:
-        stock = str(holding_df.at[idx, "stock"]).strip()
-        position = float(holding_df.at[idx, "position"])
-        entry_sig_date = str(holding_df.at[idx, "entry_sig_date"] or signal_date).strip()
-
-        close_info = get_next_trading_day_close_price(stock, end_date=entry_sig_date)
-        entry_date = str(close_info.get("date", signal_date))
-        close_price = float(close_info.get("close", 0) or 0)
-
-        parsed_sig = datetime.strptime(entry_sig_date, "%Y-%m-%d")
-        parsed_entry = datetime.strptime(entry_date, "%Y-%m-%d")
-        period = max((parsed_entry - parsed_sig).days, 0)
-
-        holding_df.at[idx, "entry_date"] = entry_date
-        holding_df.at[idx, "period"] = int(period)
-        holding_df.at[idx, "return"] = round(ret, 4)
-        holding_df.at[idx, "mdd"] = min(round(ret, 4), 0.0)
-        holding_df.at[idx, "mae"] = min(round(ret, 4), 0.0)
-        holding_df.at[idx, "gmfe"] = max(round(ret, 4), 0.0)
-        holding_df.at[idx, "bmfe"] = max(round(ret, 4), 0.0)
-
-        invested_amount += old_bank_balance * position
-
-    holding_df = holding_df[HOLDING_HEADERS]
-    holding_df.to_csv(holding_path, index=False, encoding="utf-8-sig")
-
-    new_bank_balance = old_bank_balance - invested_amount
-    bank_update = update_bank_account(
-        date=signal_date,
-        strategy=strategy,
-        bank_balance=new_bank_balance,
+    holding_rows = _build_holding_rows_from_backtest(
+        current_holdings=current_holdings,
+        signal_date=signal_date,
         trade_mode=trade_mode,
     )
+
+    holding_df = pd.DataFrame(holding_rows, columns=HOLDING_HEADERS)
+    if holding_df.empty:
+        holding_df = pd.DataFrame(columns=HOLDING_HEADERS)
+
+    holding_df.to_csv(holding_path, index=False, encoding="utf-8-sig")
     updated_rows = _read_csv_rows(holding_path, HOLDING_HEADERS)
 
-    signal_backup = os.path.join(mode_dir, f"signal_{signal_date}.csv")
-    if os.path.exists(signal_backup):
-        signal_backup = os.path.join(mode_dir, f"signal_{signal_date}_{datetime.now().strftime('%H%M%S')}.csv")
-    shutil.move(signal_path, signal_backup)
+    signal_backup = ""
+    if os.path.exists(signal_path):
+        signal_backup = os.path.join(mode_dir, f"signal_{signal_date}.csv")
+        if os.path.exists(signal_backup):
+            signal_backup = os.path.join(mode_dir, f"signal_{signal_date}_{datetime.now().strftime('%H%M%S')}.csv")
+        shutil.move(signal_path, signal_backup)
 
     return {
         "status": "success",
-        "message": f"策略 {strategy} ({trade_mode}) holding 已更新",
+        "message": f"策略 {strategy} ({trade_mode}) 依回測結果更新 holding 完成",
         "trade_mode": trade_mode,
         "signal_file": signal_path,
         "holding_file": holding_path,
         "backup_file": backup_file,
         "holding_count": len(holding_df),
-        "position_sum": round(total_position, 6),
-        "bank_before": round(old_bank_balance, 2),
-        "bank_after": round(new_bank_balance, 2),
-        "bank_update": bank_update,
+        "position_sum": round(float(pd.to_numeric(holding_df.get("position", pd.Series(dtype=float)), errors="coerce").fillna(0).sum()), 6),
+        "backtest_message": report_data.get("message") if isinstance(report_data, dict) else "",
+        "performance": report_data.get("performance") if isinstance(report_data, dict) else {},
         "signal_backup": signal_backup,
         "updated_holdings": updated_rows,
     }
@@ -490,14 +383,14 @@ def update_stock_holding(
     strategy: str,
     signal_date: str,
     orders: Optional[List[Dict[str, Any]]] = None,
-    bank_balance: float = 1_000_000,
+    start_date: Optional[str] = None,
     trade_modes: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
     單一入口工具：
-    1) 初始化銀行帳戶（若不存在）
-    2) 依 trade mode 產生 signal（若提供 orders）
-    3) 將 signal 套用到 holding 並更新銀行帳戶
+    1) 依 trade mode 產生 signal（若提供 orders）
+    2) 呼叫 backtest report
+    3) 將 current_holdings 寫入兩種 holding account
 
     預設一次處理 2 種模式：
     - equal_weight
@@ -507,38 +400,53 @@ def update_stock_holding(
     if date_error:
         return {"status": "error", "message": date_error}
 
-    modes = trade_modes or TRADE_MODES
-    mode_results: Dict[str, Any] = {}
+    if start_date:
+        start_date_error = _validate_date(start_date, "start_date")
+        if start_date_error:
+            return {"status": "error", "message": start_date_error}
+
+    modes, mode_errors = _resolve_modes(trade_modes=trade_modes)
+    mode_results: Dict[str, Any] = {**mode_errors}
+
+    if not modes:
+        return {
+            "status": "error",
+            "strategy": strategy,
+            "signal_date": signal_date,
+            "trade_modes": list(mode_results.keys()),
+            "success_count": 0,
+            "mode_results": mode_results,
+            "message": "無有效 trade_mode 可執行",
+        }
+
+    report_data = get_backtest_report(
+        strategy_name=strategy,
+        start_date=start_date,
+        end_date=signal_date,
+    )
 
     for mode in modes:
-        if mode not in TRADE_MODES:
-            mode_results[mode] = {
-                "status": "error",
-                "message": f"不支援的 trade_mode: {mode}",
-                "trade_mode": mode,
-            }
-            continue
-
-        bank_path = _bank_csv_path(strategy, mode)
-        if not os.path.exists(bank_path):
-            _init_mode_bank_account(date=signal_date, strategy=strategy, trade_mode=mode, bank_balance=bank_balance)
-
         if orders is not None:
             signal_result = _create_signal_csv(strategy=strategy, trade_mode=mode, orders=orders, signal_date=signal_date)
             if signal_result.get("status") == "error":
                 mode_results[mode] = signal_result
                 continue
 
-        apply_result = _apply_signal_to_holding(strategy=strategy, trade_mode=mode, signal_date=signal_date, bank_balance=bank_balance)
+        apply_result = _apply_backtest_to_holding(
+            strategy=strategy,
+            trade_mode=mode,
+            signal_date=signal_date,
+            report_data=report_data,
+        )
         mode_results[mode] = apply_result
 
     success_count = sum(1 for result in mode_results.values() if result.get("status") == "success")
-    status = "success" if success_count == len(modes) else "partial_success"
+    status = "success" if success_count == len(mode_results) else "partial_success"
     return {
         "status": status,
         "strategy": strategy,
         "signal_date": signal_date,
-        "trade_modes": modes,
+        "trade_modes": list(mode_results.keys()),
         "success_count": success_count,
         "mode_results": mode_results,
     }
