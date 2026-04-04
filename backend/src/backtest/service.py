@@ -7,10 +7,12 @@ from src.backtest.schemas import (
     StrategyListResponse,
     HoldingInfo,
     PerformanceMetrics,
-    BacktestReportResponse
+    BacktestReportResponse,
+    BacktestSimResponse,
 )
 from src.backtest import backtest
 from src.backtest.combinations import sim_conditions
+from src.dataframe import CustomDataFrame
 
 
 class BacktestService:
@@ -224,46 +226,201 @@ class BacktestService:
         """
         # 獲取績效指標
         performance, recent_trades = report.display()
-        performance_dict = performance.to_dict()
-        
-        # 輔助函數：提取並轉換數值
-        def extract_value(val):
-            """從格式如 {'': '33.29%'} 或 {'': '1.38'} 的字典中提取數值"""
-            if val is None:
-                return None
-            if isinstance(val, dict):
-                # 提取字典中的值
-                val = val.get('', val.get(list(val.keys())[0] if val else ''))
-            if isinstance(val, str):
-                # 移除百分比符號並轉換為浮點數
-                val = val.strip().rstrip('%')
-                try:
-                    return float(val)
-                except (ValueError, AttributeError):
-                    return None
-            return val
-        
-        performance = PerformanceMetrics(
-            annualized_rate_of_return=extract_value(performance_dict.get("annualized_rate_of_return")),
-            sharpe=extract_value(performance_dict.get("sharpe")),
-            alpha=extract_value(performance_dict.get("alpha")),
-            beta=extract_value(performance_dict.get("beta")),
-            max_drawdown=extract_value(performance_dict.get("max_drawdown")),
-            avg_holdings=extract_value(performance_dict.get("avg_holdings")),
-            max_holdings=int(extract_value(performance_dict.get("max_holdings"))) if extract_value(performance_dict.get("max_holdings")) else None,
-            win_ratio=extract_value(performance_dict.get("win_ratio")),
-        )
+        performance = self._build_performance_metrics(performance)
         
         # 獲取當前持股
         current_holdings = self._extract_current_holdings(recent_trades)
         
         
         return performance, current_holdings
+
+    @staticmethod
+    def _extract_value(val):
+        """從格式如 {'': '33.29%'} 或 {'': '1.38'} 的字典中提取數值"""
+        if val is None:
+            return None
+        if isinstance(val, dict):
+            val = val.get("", val.get(list(val.keys())[0] if val else ""))
+        if isinstance(val, str):
+            val = val.strip().rstrip("%")
+            try:
+                return float(val)
+            except (ValueError, AttributeError):
+                return None
+        return val
+
+    def _build_performance_metrics(self, performance_df: pd.DataFrame) -> PerformanceMetrics:
+        performance_dict = performance_df.to_dict()
+
+        max_holdings_value = self._extract_value(performance_dict.get("max_holdings"))
+
+        return PerformanceMetrics(
+            annualized_rate_of_return=self._extract_value(
+                performance_dict.get("annualized_rate_of_return")
+            ),
+            sharpe=self._extract_value(performance_dict.get("sharpe")),
+            alpha=self._extract_value(performance_dict.get("alpha")),
+            beta=self._extract_value(performance_dict.get("beta")),
+            max_drawdown=self._extract_value(performance_dict.get("max_drawdown")),
+            avg_holdings=self._extract_value(performance_dict.get("avg_holdings")),
+            max_holdings=int(max_holdings_value) if max_holdings_value is not None else None,
+            win_ratio=self._extract_value(performance_dict.get("win_ratio")),
+        )
+
+    @staticmethod
+    def _normalize_datetime(value):
+        if pd.isna(value):
+            return None
+        if isinstance(value, (pd.Timestamp, datetime)):
+            return value.strftime("%Y-%m-%d")
+        return str(value)[:10]
+
+    @staticmethod
+    def _normalize_number(value, cast_type=float):
+        if pd.isna(value):
+            return None
+        try:
+            return cast_type(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _get_trade_price_by_index(self, stock_id: str, trade_index: Any) -> Optional[float]:
+        """依照回測主索引（price:close）抓取該股票交易價格。"""
+        if trade_index is None or pd.isna(trade_index):
+            return None
+
+        try:
+            idx = int(trade_index)
+        except (TypeError, ValueError):
+            return None
+
+        if idx < 0:
+            return None
+
+        close_df = self.data.get("price:close")
+        if close_df is None or close_df.empty:
+            return None
+
+        stock_col = str(stock_id)
+        if stock_col not in close_df.columns:
+            return None
+
+        if idx >= len(close_df.index):
+            return None
+
+        price = close_df[stock_col].iloc[idx]
+        if pd.isna(price):
+            return None
+
+        return float(price)
+
+    def backtest_sim(
+        self,
+        signal: Dict[str, Any],
+        entry_sig_date: Optional[str] = None,
+        exit_sig_date: Optional[str] = None,
+    ) -> BacktestSimResponse:
+        """以自定義持股與時間點執行回測，回傳整體績效與持股績效明細。"""
+        if not signal:
+            raise ValueError("signal 不可為空")
+
+        if not entry_sig_date:
+            raise ValueError("entry_sig_date 不可為空")
+
+        entry_dt = pd.to_datetime(entry_sig_date)
+        exit_dt = pd.to_datetime(exit_sig_date) if exit_sig_date else None
+
+        if exit_dt is not None and exit_dt <= entry_dt:
+            raise ValueError("exit_sig_date 必須晚於 entry_sig_date")
+
+        stock_ids = list(signal.keys())
+        entry_weights = [float(signal[sid]) for sid in stock_ids]
+
+        rows = [
+            {
+                "company_symbol": entry_dt,
+                **{sid: w for sid, w in zip(stock_ids, entry_weights)},
+            }
+        ]
+
+        # backtest.sim 需要至少兩個日期點，因此即便未提供 exit_sig_date 也建立第二筆訊號。
+        if exit_dt is None:
+            exit_dt = entry_dt + timedelta(days=30)
+
+        rows.append(
+            {
+                "company_symbol": exit_dt,
+                **{sid: 0.0 for sid in stock_ids},
+            }
+        )
+
+        df = pd.DataFrame(rows)
+        df = df.set_index("company_symbol")
+        df.index = pd.to_datetime(df.index)
+        df = CustomDataFrame(df)
+
+        report = backtest.sim(df, resample=None, data=self.data)
+        performance_df, pivot_table = report.display()
+
+        performance = self._build_performance_metrics(performance_df)
+
+        expected_columns = [
+            "entry_date",
+            "exit_date",
+            "entry_sig_date",
+            "exit_sig_date",
+            "position",
+            "period",
+            "entry_index",
+            "exit_index",
+            "return",
+            "mae",
+            "gmfe",
+            "bmfe",
+            "mdd",
+            "pdays",
+            "weight",
+            "next_weights",
+        ]
+
+        holdings_performance: List[Dict[str, Any]] = []
+        pivot_table = pivot_table.copy()
+        for col in expected_columns:
+            if col not in pivot_table.columns:
+                pivot_table[col] = np.nan
+
+        for stock_id, row in pivot_table[expected_columns].iterrows():
+            holdings_performance.append(
+                {
+                    "stock_id": str(stock_id),
+                    "entry_date": self._normalize_datetime(row.get("entry_date")),
+                    "exit_date": self._normalize_datetime(row.get("exit_date")),
+                    "entry_sig_date": self._normalize_datetime(row.get("entry_sig_date")),
+                    "exit_sig_date": self._normalize_datetime(row.get("exit_sig_date")),
+                    "position": self._normalize_number(row.get("position"), float),
+                    "period": self._normalize_number(row.get("period"), int),
+                    "entry_price": self._get_trade_price_by_index(str(stock_id), row.get("entry_index")),
+                    "exit_price": self._get_trade_price_by_index(str(stock_id), row.get("exit_index")),
+                    "return": self._normalize_number(row.get("return"), float),
+                    "mae": self._normalize_number(row.get("mae"), float),
+                    "gmfe": self._normalize_number(row.get("gmfe"), float),
+                    "bmfe": self._normalize_number(row.get("bmfe"), float),
+                    "mdd": self._normalize_number(row.get("mdd"), float),
+                    "pdays": self._normalize_number(row.get("pdays"), float),
+                    "weight": self._normalize_number(row.get("weight"), float),
+                    "next_weights": self._normalize_number(row.get("next_weights"), float),
+                }
+            )
+
+        return BacktestSimResponse(
+            performance=performance,
+            holdings_performance=holdings_performance,
+            message="回測完成: 自定義持股模擬",
+        )
     
     def _extract_current_holdings(self, report) -> List[HoldingInfo]:
         """從報告中提取當前持股"""
         holdings = []
-        close = self.data.get("price:close")
 
         # 嘗試從報告中獲取最新持股資訊
         for idx, row in report.iterrows():
@@ -271,15 +428,14 @@ class BacktestService:
             if pd.notna(exit_date):
                 continue
 
-            stock_close = close[str(idx)]
             entry_index = row.get('entry_index')
-            entry_price = stock_close.iloc[entry_index] if entry_index is not None else None
+            entry_price = self._get_trade_price_by_index(str(idx), entry_index)
 
             holdings.append(HoldingInfo(
                 stock_id=str(idx) if isinstance(idx, (str, int)) else None,
                 position=float(round(row.get('position'), 4)) if pd.notna(row.get('position')) else None,
                 entry_date=str(row.get('entry_date'))[:10] if pd.notna(row.get('entry_date')) else None,
-                entry_price=float(entry_price) if entry_price is not None else None,
+                entry_price=entry_price,
             ))
         
         return holdings

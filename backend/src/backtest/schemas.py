@@ -43,3 +43,12 @@ class BacktestReportResponse(BaseModel):
     current_holdings: List[HoldingInfo] = Field(..., description="當前持股列表")
     message: Optional[str] = Field(None, description="附加訊息")
 
+
+class BacktestSimResponse(BaseModel):
+    """自定義持股回測回應"""
+    performance: PerformanceMetrics = Field(..., description="此次模擬持股績效")
+    holdings_performance: List[Dict[str, Any]] = Field(
+        ..., description="模擬持股績效明細"
+    )
+    message: Optional[str] = Field(None, description="附加訊息")
+

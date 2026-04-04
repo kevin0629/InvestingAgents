@@ -1,4 +1,5 @@
 import requests
+import json
 from typing import Optional, Dict, Any
 from .utils import get_backend_base_url
 import pandas as pd
@@ -85,6 +86,27 @@ def get_strategy() -> Dict[str, str]:
 
     # return header + content
     return data
+
+
+def get_backtest_sim(
+    signal: Dict[str, Any],
+    entry_sig_date: str,
+    exit_sig_date: Optional[str] = None,
+) -> Dict[str, Any]:
+    """呼叫 /backtest/cal_performance 取得持股績效明細。"""
+    base_url = get_backend_base_url()
+    url = f"{base_url}/backtest/cal_performance"
+
+    params: Dict[str, Any] = {
+        "signal": json.dumps(signal, ensure_ascii=False),
+        "entry_sig_date": entry_sig_date,
+    }
+    if exit_sig_date:
+        params["exit_sig_date"] = exit_sig_date
+
+    response = requests.get(url, params=params)
+    response.raise_for_status()
+    return response.json()
 
 
 if __name__ == "__main__":
