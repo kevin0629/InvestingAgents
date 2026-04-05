@@ -109,5 +109,23 @@ def get_backtest_sim(
     return response.json()
 
 
+def get_market_return(
+    entry_sig_date: str,
+    exit_sig_date: str,
+) -> Dict[str, Any]:
+    """呼叫 /backtest/cal_market_return 取得大盤績效。"""
+    base_url = get_backend_base_url()
+    url = f"{base_url}/backtest/cal_market_return"
+
+    params: Dict[str, Any] = {
+        "entry_sig_date": entry_sig_date,
+        "exit_sig_date": exit_sig_date,
+    }
+
+    response = requests.get(url, params=params)
+    response.raise_for_status()
+    return response.json()
+
+
 if __name__ == "__main__":
     print(get_backtest_report("monthly_revenue_growth_roe", '2025-11-21'))

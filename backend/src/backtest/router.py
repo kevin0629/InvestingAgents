@@ -5,6 +5,7 @@ from src.backtest.schemas import (
     StrategyListResponse,
     StrategyInfo,
     BacktestSimResponse,
+    MarketReturnResponse,
 )
 from src.backtest.service import BacktestService
 from typing import Optional, Dict, Any
@@ -124,6 +125,32 @@ async def calculate_performance(
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         print(f"Error in calculate_performance: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+
+
+@router.get("/cal_market_return", response_model=MarketReturnResponse)
+async def calculate_market_return(
+    entry_sig_date: Optional[str] = Query(None, description="訊號開始日期 (YYYY-MM-DD)"),
+    exit_sig_date: Optional[str] = Query(None, description="訊號結束日期 (YYYY-MM-DD)"),
+):
+    """以訊號日期後的下一個交易日計算大盤報酬。"""
+    try:
+        data = get_data_instance()
+        service = BacktestService(data)
+
+        report = service.calculate_market_return(
+            entry_sig_date=entry_sig_date,
+            exit_sig_date=exit_sig_date,
+        )
+
+        return report
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        print(f"Error in calculate_market_return: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
 
 

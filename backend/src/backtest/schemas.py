@@ -19,8 +19,7 @@ class HoldingInfo(BaseModel):
     """持股資訊"""
     stock_id: str = Field(..., description="股票代碼")
     position: float = Field(..., description="權重")
-    entry_date: Optional[str] = Field(None, description="進場日期")
-    entry_price: Optional[float] = Field(None, description="進場價格")
+    entry_sig_date: Optional[str] = Field(None, description="進場訊號日期")
 
 
 class PerformanceMetrics(BaseModel):
@@ -40,6 +39,7 @@ class BacktestReportResponse(BaseModel):
     strategy_name: str = Field(..., description="策略名稱")
     strategy_description: str = Field(..., description="策略描述")
     performance: PerformanceMetrics = Field(..., description="績效指標")
+    previous_period_return: float = Field(..., description="上一期加權報酬率")
     current_holdings: List[HoldingInfo] = Field(..., description="當前持股列表")
     message: Optional[str] = Field(None, description="附加訊息")
 
@@ -50,5 +50,17 @@ class BacktestSimResponse(BaseModel):
     holdings_performance: List[Dict[str, Any]] = Field(
         ..., description="模擬持股績效明細"
     )
+    message: Optional[str] = Field(None, description="附加訊息")
+
+
+class MarketReturnResponse(BaseModel):
+    """大盤績效回應"""
+    entry_sig_date: str = Field(..., description="進場訊號日期")
+    exit_sig_date: str = Field(..., description="出場訊號日期")
+    entry_trade_date: str = Field(..., description="進場實際交易日(訊號日後第一個交易日)")
+    exit_trade_date: str = Field(..., description="出場實際交易日(訊號日後第一個交易日)")
+    entry_price: float = Field(..., description="進場價格")
+    exit_price: float = Field(..., description="出場價格")
+    market_return: float = Field(..., description="大盤報酬率")
     message: Optional[str] = Field(None, description="附加訊息")
 

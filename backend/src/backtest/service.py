@@ -9,6 +9,7 @@ from src.backtest.schemas import (
     PerformanceMetrics,
     BacktestReportResponse,
     BacktestSimResponse,
+    MarketReturnResponse,
 )
 from src.backtest import backtest
 from src.backtest.combinations import sim_conditions
@@ -101,12 +102,17 @@ class BacktestService:
         report = backtest.sim(strategy_signal, resample=None, data=self.data)
         
         # 提取報告數據
-        performance, current_holdings = self._extract_report_data(report)
+        performance, current_holdings, recent_trades = self._extract_report_data(report)
+        previous_period_return = self._calculate_previous_period_return(
+            recent_trades=recent_trades,
+            end_date=end_date,
+        )
         
         return BacktestReportResponse(
             strategy_name=strategy_name,
             strategy_description=strategy_config["description"],
             performance=performance,
+            previous_period_return=previous_period_return,
             current_holdings=current_holdings,
             message=f"回測完成: 截止日 {end_date}"
         )
@@ -232,7 +238,28 @@ class BacktestService:
         current_holdings = self._extract_current_holdings(recent_trades)
         
         
-        return performance, current_holdings
+        return performance, current_holdings, recent_trades
+
+    def _calculate_previous_period_return(
+        self,
+        recent_trades: pd.DataFrame,
+        end_date: str,
+    ) -> float:
+        """計算上一期加權報酬：sum(position * return)。"""
+
+        entry_sig_dates = pd.to_datetime(recent_trades["entry_sig_date"], errors="coerce")
+        exit_sig_dates = pd.to_datetime(recent_trades["exit_sig_date"], errors="coerce")
+
+        mask1 = (exit_sig_dates >= end_date) | (exit_sig_dates.isna())
+        previous_period_mask = mask1 & (entry_sig_dates < end_date)
+
+        positions = pd.to_numeric(recent_trades["position"], errors="coerce").fillna(0.0)
+        returns = pd.to_numeric(recent_trades["return"], errors="coerce").fillna(0.0)
+
+        weighted_returns = positions * returns
+        sum  = weighted_returns[previous_period_mask].sum()
+
+        return round(sum * 100, 4)
 
     @staticmethod
     def _extract_value(val):
@@ -283,6 +310,79 @@ class BacktestService:
             return cast_type(value)
         except (TypeError, ValueError):
             return None
+
+    @staticmethod
+    def _get_next_trading_value(series: pd.Series, signal_date: str) -> tuple:
+        """取 signal_date 之後第一個交易日的價格。"""
+        clean_series = series.dropna().copy()
+        if clean_series.empty:
+            raise ValueError("找不到可用的大盤價格資料")
+
+        clean_series.index = pd.to_datetime(clean_series.index, errors="coerce")
+        clean_series = clean_series[~clean_series.index.isna()].sort_index()
+        if clean_series.empty:
+            raise ValueError("大盤價格索引格式錯誤")
+
+        signal_dt = pd.to_datetime(signal_date)
+        target_index = clean_series.index.searchsorted(signal_dt, side="right")
+        if target_index >= len(clean_series.index):
+            raise ValueError(f"signal_date={signal_date} 後無可用交易日")
+
+        trade_dt = clean_series.index[target_index]
+        trade_price = float(clean_series.iloc[target_index])
+        return trade_dt.strftime("%Y-%m-%d"), trade_price
+
+    def calculate_market_return(
+        self,
+        entry_sig_date: Optional[str] = None,
+        exit_sig_date: Optional[str] = None,
+    ) -> MarketReturnResponse:
+        """以訊號日期後第一個交易日的大盤價格計算報酬。"""
+        if not entry_sig_date:
+            raise ValueError("entry_sig_date 不可為空")
+
+        if not exit_sig_date:
+            raise ValueError("exit_sig_date 不可為空")
+
+        entry_dt = pd.to_datetime(entry_sig_date)
+        exit_dt = pd.to_datetime(exit_sig_date)
+        if exit_dt <= entry_dt:
+            raise ValueError("exit_sig_date 必須晚於 entry_sig_date")
+
+        market_df = self.data.get("adjustedtaiex:close")
+        if market_df is None or market_df.empty:
+            market_df = self.data.get("taiex:close")
+        if market_df is None or market_df.empty:
+            raise ValueError("找不到可用的大盤資料")
+
+        if isinstance(market_df, pd.Series):
+            market_series = market_df
+        elif "close" in market_df.columns:
+            market_series = market_df["close"]
+        elif market_df.shape[1] >= 1:
+            market_series = market_df.iloc[:, 0]
+        else:
+            raise ValueError("大盤資料欄位不足")
+
+        entry_trade_date, entry_price = self._get_next_trading_value(market_series, entry_sig_date)
+        exit_trade_date, exit_price = self._get_next_trading_value(market_series, exit_sig_date)
+
+        if entry_price == 0:
+            raise ValueError("進場價格不可為 0")
+
+        market_return = float((exit_price - entry_price) / entry_price)
+        market_return = market_return - 0.00585  # 扣除交易成本: 交易稅 0.3% + 交易手續費 0.285%
+
+        return MarketReturnResponse(
+            entry_sig_date=entry_sig_date,
+            exit_sig_date=exit_sig_date,
+            entry_trade_date=entry_trade_date,
+            exit_trade_date=exit_trade_date,
+            entry_price=entry_price,
+            exit_price=exit_price,
+            market_return=market_return,
+            message="回測完成: 大盤績效模擬",
+        )
 
     def _get_trade_price_by_index(self, stock_id: str, trade_index: Any) -> Optional[float]:
         """依照回測主索引（price:close）抓取該股票交易價格。"""
@@ -428,14 +528,10 @@ class BacktestService:
             if pd.notna(exit_date):
                 continue
 
-            entry_index = row.get('entry_index')
-            entry_price = self._get_trade_price_by_index(str(idx), entry_index)
-
             holdings.append(HoldingInfo(
-                stock_id=str(idx) if isinstance(idx, (str, int)) else None,
+                stock_id=str(idx) if isinstance(idx, (str, int)) else "",
                 position=float(round(row.get('position'), 4)) if pd.notna(row.get('position')) else None,
-                entry_date=str(row.get('entry_date'))[:10] if pd.notna(row.get('entry_date')) else None,
-                entry_price=entry_price,
+                entry_sig_date=str(row.get('entry_sig_date'))[:10] if pd.notna(row.get('entry_sig_date')) else None,
             ))
         
         return holdings

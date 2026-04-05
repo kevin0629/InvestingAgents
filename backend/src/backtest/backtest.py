@@ -327,9 +327,42 @@ def sim(position: Union[pd.DataFrame, pd.Series],
               .pipe(convert_datetime_series)
               .pipe(assign_exit_nat)
               )
+
+    def compute_trade_return(row):
+        stock_id = str(row.get('stock_id'))
+        if stock_id not in price.columns:
+            return np.nan
+
+        try:
+            entry_idx = int(row.get('entry_index'))
+        except (TypeError, ValueError):
+            return np.nan
+
+        if entry_idx < 0 or entry_idx >= len(price.index):
+            return np.nan
+
+        try:
+            exit_idx = int(row.get('exit_index'))
+        except (TypeError, ValueError):
+            exit_idx = -1
+
+        if exit_idx < 0:
+            end_pos = int(price.index.searchsorted(backtest_end_date, side='right') - 1)
+            exit_idx = min(max(end_pos, 0), len(price.index) - 1)
+        elif exit_idx >= len(price.index):
+            exit_idx = len(price.index) - 1
+
+        entry_price = price.iloc[entry_idx].get(stock_id)
+        exit_price = price.iloc[exit_idx].get(stock_id)
+
+        if pd.isna(entry_price) or pd.isna(exit_price) or float(entry_price) == 0:
+            return np.nan
+
+        gross_return = float(exit_price) / float(entry_price) - 1.0
+        return gross_return - 2 * fee_ratio - tax_ratio
     
     if len(trades) != 0:
-        trades = trades.assign(**{'return': m.iloc[:, -1] - 2*fee_ratio - tax_ratio})
+        trades = trades.assign(**{'return': trades.apply(compute_trade_return, axis=1)})
 
     if touched_exit:
         trades['return'] = trades['return'].clip(-abs(stop_loss), abs(take_profit))
