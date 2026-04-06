@@ -1,7 +1,7 @@
 import os
 import json
 import uuid
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 from datetime import datetime, date
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
@@ -17,7 +17,6 @@ from pathlib import Path
 from functools import lru_cache
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.embedding_client import create_embedding_client
-from typing import Union
 
 
 def get_embedding(text: str) -> List[float]:
@@ -64,30 +63,78 @@ def get_qdrant_client() -> QdrantClient:
     return client
 
 
-def store_reflection(
+def store_reflections(
+    reflection_text: Union[str, List[Union[str, Dict[str, Any]]], Dict[str, Any]],
+    metadata: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Store reflection data (single or batch) into Qdrant/JSONL fallback.
+
+    Supported input forms:
+    - Single mode: reflection_text is str, metadata is optional dict.
+        - Batch mode: reflection_text is List[str] or List[Dict].
+            For List[str], shared metadata will be applied to each item.
+            For List[Dict], each item supports {"reflection_text": str, "metadata": Dict[str, Any]}.
+    - Dict mode: reflection_text is Dict with keys above.
+    """
+    if isinstance(reflection_text, list):
+        if not reflection_text:
+            return "No reflections to store"
+
+        results: List[str] = []
+        success_count = 0
+        for index, row in enumerate(reflection_text):
+            row_text = ""
+            row_metadata = dict(metadata or {})
+            if isinstance(row, str):
+                row_text = row.strip()
+            elif isinstance(row, dict):
+                row_text = str(row.get("reflection_text") or "").strip()
+                per_row_metadata = row.get("metadata")
+                if per_row_metadata is not None and not isinstance(per_row_metadata, dict):
+                    results.append(f"[{index}] skipped: metadata must be dict")
+                    continue
+                if isinstance(per_row_metadata, dict):
+                    row_metadata.update(per_row_metadata)
+            else:
+                results.append(f"[{index}] skipped: item must be str or dict")
+                continue
+
+            if not row_text:
+                results.append(f"[{index}] skipped: reflection_text is empty")
+                continue
+
+            result = _store_single_reflection(row_text, row_metadata)
+            results.append(f"[{index}] {result}")
+            if result.startswith("Stored in"):
+                success_count += 1
+
+        return f"Batch store completed: {success_count}/{len(reflection_text)} succeeded\n" + "\n".join(results)
+
+    if isinstance(reflection_text, dict):
+        row_text = str(reflection_text.get("reflection_text") or "").strip()
+        row_metadata = reflection_text.get("metadata")
+        if row_metadata is not None and not isinstance(row_metadata, dict):
+            row_metadata = None
+        return _store_single_reflection(row_text, row_metadata)
+
+    if not isinstance(reflection_text, str):
+        raise ValueError("reflection_text must be str, dict, or list[dict]")
+
+    return _store_single_reflection(reflection_text, metadata)
+
+
+def _store_single_reflection(
     reflection_text: str,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> str:
-    """Store a reflection (text + metadata) into Qdrant (or JSONL fallback).
-
-    Behavior notes:
-    - If `metadata` is omitted, an empty dict is created and a `date` key is
-         added with today's date (a `datetime.date` object, formatted YYYY-MM-DD).
-    - If `metadata['date']` is provided as a string in YYYY-MM-DD format it
-        will be parsed into a `datetime.date` object. Existing `date` values
-        that are already `datetime`/`date` objects are left as-is.
-    - The function computes an embedding for `reflection_text` and upserts a
-        `PointStruct` with `id`, `vector`, and `payload` (payload contains the
-        original metadata plus `reflection_text`).
-    - If Qdrant upsert fails and `fallback_to_jsonl` is True, the record is
-        appended to a JSONL fallback file.
-
-    Returns the created reflection UUID string (prefixed message).
-    """
+    """Store one reflection record into Qdrant/JSONL fallback."""
     collection_name = "reflections"
     fallback_to_jsonl = True
 
     reflection_id = str(uuid.uuid4())
+
+    if not reflection_text.strip():
+        return "Skipped: reflection_text is empty"
     
     if metadata is None:
         metadata = {}
@@ -155,7 +202,7 @@ def retrieve_reflections(
 
     Raises on Qdrant errors.
     """
-    limit = 5
+    limit = 2
     score_threshold = 0.7
     collection_name = "reflections"
     query_embedding = get_embedding(query_text)
@@ -324,5 +371,5 @@ if __name__ == "__main__":
     samples = _realistic_samples()
     result = retrieve_reflections(query_text=samples[0]["query"],filter_conditions={"strategy": "monthly_revenue_growth_roe", "date": "2025-12-31"})
     print(result)
-    # store_reflection(reflection_text=samples[2]["reflection_text"], metadata=samples[2]["metadata"])
+    # store_reflections(reflection_text=samples[2]["reflection_text"], metadata=samples[2]["metadata"])
     # print(get_collection_stats())

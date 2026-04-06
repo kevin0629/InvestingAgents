@@ -18,7 +18,6 @@ from tradingagents.agents.utils.agent_utils import (
     get_tools,
     get_balance_sheet,
     get_cashflow,
-    get_company_info,
     get_dupont_analysis,
     get_factors,
     get_income_statement,
@@ -70,6 +69,8 @@ def create_financial_analyst(llm):
                     "所有工具呼叫的 end_date 參數皆必須設為 {end_date}，為本次資料分析截止日期，嚴禁使用截止日期以後的資料。\n"
                     "分析步驟:\n"
                     "Step1: task_type 為 {task_type}。若 `task_type` 是 VERIFICATION，代表這是庫存股，你必須先驗證 {buy_reason} 有沒有符合預期，並偵測盲點。\n"
+                    "若 `task_type` 是 HYBRID，代表這支股票上期與本期都被選到，你必須"
+                    "針對既有 buy_reason 的驗證（輸出到 financial_verification_reports，並將 selected 設為 true）\n\n"
                     "判斷標準範例:\n"
                     "- SUCCESS: 數據完全支持當初的論點（例如：預測毛利升，真的升了）\n"
                     "- FAILURE: 數據與預測相反（例如：預測營收增，結果持平或衰退）\n"
@@ -100,18 +101,12 @@ def create_financial_analyst(llm):
             ]
         )
 
-        print("Financial Analyst available symbol", task.symbol)
-        print("Financial Analyst received end_date:", end_date)
-        print("Financial Analyst available task_type", task.task_type)
-        print("Financial Analyst available buy_reason", task.buy_reason)
-        print("Financial Analyst available company_info", task.company_info)
-
         prompt = prompt.partial(
             symbol=task.symbol,
             end_date=end_date,
             task_type=task.task_type,
             company_info=task.company_info,
-            buy_reason=task.buy_reason if task.task_type == "VERIFICATION" else "N/A",
+            buy_reason=task.buy_reason if task.task_type in {"VERIFICATION", "HYBRID"} else "N/A",
         )
         prompt = prompt.partial(tool_names=tool_names)
 

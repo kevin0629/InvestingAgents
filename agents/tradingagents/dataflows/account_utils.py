@@ -1,8 +1,6 @@
 import os
 import re
-import shutil
 import json
-import calendar
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -11,9 +9,10 @@ import pandas as pd
 from .config import get_config
 from .backtest_utils import get_backtest_sim
 
-SIGNAL_HEADERS = ["stock", "position", "entry_sig_date"]
+SIGNAL_HEADERS = ["stock", "position", "entry_sig_date", "buy_reason"]
 HOLDING_HEADERS = [
     "stock",
+    "buy_reason",
     "entry_sig_date",
     "exit_sig_date",
     "entry_date",
@@ -62,10 +61,6 @@ def _mode_dir(strategy: str, trade_mode: str) -> str:
     return mode_dir
 
 
-def _signal_csv_path(strategy: str, trade_mode: str) -> str:
-    return os.path.join(_mode_dir(strategy, trade_mode), "signal.csv")
-
-
 def _signal_csv_path_by_date(strategy: str, trade_mode: str, signal_date: str) -> str:
     date_token = signal_date.replace("-", "")
     return os.path.join(_mode_dir(strategy, trade_mode), f"signal_{date_token}.csv")
@@ -82,10 +77,6 @@ def _latest_dated_signal_csv_path(strategy: str, trade_mode: str) -> Optional[st
 
     latest_file = sorted(candidate_files)[-1]
     return os.path.join(mode_dir, latest_file)
-
-
-def _holding_csv_path(strategy: str, trade_mode: str) -> str:
-    return os.path.join(_mode_dir(strategy, trade_mode), "holding_account.csv")
 
 
 def _holding_csv_path_by_date(strategy: str, trade_mode: str, end_date: str) -> str:
@@ -172,18 +163,6 @@ def _modes_by_reflection(reflection: bool) -> List[str]:
     return ["equal_weight_without_reflection", "custom_weight_without_reflection"]
 
 
-def _previous_month_date(date_str: str) -> str:
-    current = datetime.strptime(date_str, "%Y-%m-%d")
-    if current.month == 1:
-        year, month = current.year - 1, 12
-    else:
-        year, month = current.year, current.month - 1
-
-    last_day = calendar.monthrange(year, month)[1]
-    day = min(current.day, last_day)
-    return datetime(year=year, month=month, day=day).strftime("%Y-%m-%d")
-
-
 def _previous_month_token(date_str: str) -> str:
     current = datetime.strptime(date_str, "%Y-%m-%d")
     if current.month == 1:
@@ -236,9 +215,77 @@ def _normalize_orders(orders: List[Dict[str, Any]], signal_date: str) -> List[Di
                 "stock": stock,
                 "position": position,
                 "entry_sig_date": entry_sig_date,
+                "buy_reason": str(order.get("buy_reason") or "").strip(),
             }
         )
     return normalized
+
+
+def _parse_orders_payload(parsed_orders: Any, signal_date: str) -> List[Dict[str, Any]]:
+    """
+    支援兩種 orders JSON 結構：
+    1) 舊格式（向下相容）: {"2330": 0.35, "2454": 0.2}
+    2) 新格式（推薦）:
+       {
+         "orders": [
+           {"stock": "2330", "position": 0.35, "buy_reason": "..."},
+           {"stock": "2454", "position": 0.2, "buy_reason": "..."}
+         ]
+       }
+    """
+    if isinstance(parsed_orders, dict) and isinstance(parsed_orders.get("orders"), list):
+        parsed_order_rows: List[Dict[str, Any]] = []
+        for index, order in enumerate(parsed_orders.get("orders") or []):
+            if not isinstance(order, dict):
+                raise ValueError(f"orders.orders[{index}] 必須是 Dict")
+
+            stock = str(order.get("stock") or order.get("symbol") or "").strip()
+            if not stock:
+                raise ValueError(f"orders.orders[{index}] stock 不可為空")
+
+            try:
+                parsed_position = float(order.get("position", 0) or 0)
+            except (TypeError, ValueError):
+                raise ValueError(f"orders.orders[{index}].position 必須是數字")
+
+            entry_sig_date = str(order.get("entry_sig_date") or signal_date).strip()
+            date_error = _validate_date(entry_sig_date, f"orders.orders[{index}].entry_sig_date")
+            if date_error:
+                raise ValueError(date_error)
+
+            parsed_order_rows.append(
+                {
+                    "stock": stock,
+                    "position": parsed_position,
+                    "entry_sig_date": entry_sig_date,
+                    "buy_reason": str(order.get("buy_reason") or "").strip(),
+                }
+            )
+        return parsed_order_rows
+
+    if isinstance(parsed_orders, dict):
+        parsed_order_rows = []
+        for stock, position in parsed_orders.items():
+            if stock == "orders":
+                continue
+            try:
+                parsed_position = float(position)
+            except (TypeError, ValueError):
+                raise ValueError(f"orders[{stock}] 必須是數字")
+
+            parsed_order_rows.append(
+                {
+                    "stock": str(stock),
+                    "position": parsed_position,
+                    "entry_sig_date": signal_date,
+                    "buy_reason": "",
+                }
+            )
+        return parsed_order_rows
+
+    raise ValueError(
+        "orders JSON 必須是 Dict。建議格式: {\"orders\": [{\"stock\": \"2330\", \"position\": 0.35, \"buy_reason\": \"...\"}]}"
+    )
 
 
 def _prepare_mode_orders(orders: List[Dict[str, Any]], signal_date: str, trade_mode: str) -> List[Dict[str, Any]]:
@@ -297,7 +344,7 @@ def create_stock_holding(
     signal_date: str,
     reflection: bool = False,
 ) -> Dict[str, Any]:
-    """建立 signal CSV。orders 需為股票代號到部位的 JSON 物件。"""
+    """建立 signal CSV。支援舊格式與新格式 orders JSON。"""
     date_error = _validate_date(signal_date, "signal_date")
     if date_error:
         return {"status": "error", "message": date_error}
@@ -307,23 +354,10 @@ def create_stock_holding(
     except json.JSONDecodeError:
         return {"status": "error", "message": "orders 必須為合法 JSON 字串"}
 
-    if not isinstance(parsed_orders, dict):
-        return {"status": "error", "message": "orders JSON 必須為 Dict，例如 {\"2330\": 0.35}"}
-
-    parsed_order_rows: List[Dict[str, Any]] = []
-    for stock, position in parsed_orders.items():
-        try:
-            parsed_position = float(position)
-        except (TypeError, ValueError):
-            return {"status": "error", "message": f"orders[{stock}] 必須是數字"}
-
-        parsed_order_rows.append(
-            {
-                "stock": str(stock),
-                "position": parsed_position,
-                "entry_sig_date": signal_date,
-            }
-        )
+    try:
+        parsed_order_rows = _parse_orders_payload(parsed_orders=parsed_orders, signal_date=signal_date)
+    except ValueError as exc:
+        return {"status": "error", "message": str(exc)}
 
     if not parsed_order_rows:
         return {"status": "error", "message": "orders 不可為空"}
@@ -342,39 +376,55 @@ def create_stock_holding(
     return "Successfully place orders with reflection!" if reflection else "Successfully place orders!"
 
 
-def get_stock_account(strategy: str) -> Dict[str, Any]:
-    """先嘗試依 signal 更新 holding，再回傳最新持股清單。"""
-    signal_path = _latest_dated_signal_csv_path(strategy, "custom_weight")
+def get_stock_account(strategy: str, end_date: str) -> Dict[str, Any]:
+    """
+    先依 end_date 執行 update_stock_holding，再回傳 custom_weight 最新 holding DataFrame。
+    同時回傳上一期 signal_date（作為 distributor 的 start_date 來源）。
+    """
+    update_result = update_stock_holding(strategy=strategy, end_date=end_date)
+
+    if update_result.get("status") == "error":
+        return {
+            "status": "error",
+            "message": update_result.get("message", "update_stock_holding 失敗"),
+            "trade_mode": "custom_weight",
+            "file_path": "",
+            "start_sig_date": "",
+            "performance": {},
+            "performance_return": "",
+            "dataframe": pd.DataFrame(columns=HOLDING_HEADERS),
+            "rows": [],
+            "row_count": 0,
+        }
+
     holding_path = _latest_dated_holding_csv_path(strategy, "custom_weight")
-
-    # 若有 signal_YYYYMMDD.csv，先執行更新流程
-    if signal_path and os.path.exists(signal_path):
-        signal_df = pd.read_csv(signal_path, encoding="utf-8-sig")
-        if not signal_df.empty and "entry_sig_date" in signal_df.columns:
-            signal_date = str(signal_df.iloc[0].get("entry_sig_date", "")).strip()
-            if signal_date:
-                update_stock_holding(
-                    strategy=strategy,
-                    end_date=signal_date,
-                )
-                holding_path = _latest_dated_holding_csv_path(strategy, "custom_weight")
-
     if not holding_path or not os.path.exists(holding_path):
         return {
             "status": "success",
+            "message": "custom_weight 無可用 holding 檔案",
+            "trade_mode": "custom_weight",
             "file_path": "",
+            "start_sig_date": str(update_result.get("signal_date") or ""),
+            "performance": update_result.get("performance", {}),
+            "performance_return": str((update_result.get("performance") or {}).get("return") or ""),
+            "dataframe": pd.DataFrame(columns=HOLDING_HEADERS),
             "rows": [],
             "row_count": 0,
-            "trade_mode": "custom_weight",
         }
 
-    rows = _read_csv_rows(holding_path, HOLDING_HEADERS)
+    dataframe = _read_csv_df(holding_path, HOLDING_HEADERS)
+    rows = dataframe.where(pd.notnull(dataframe), "").to_dict(orient="records") if not dataframe.empty else []
     return {
         "status": "success",
+        "message": "custom_weight holding 更新並載入完成",
+        "trade_mode": "custom_weight",
         "file_path": holding_path,
+        "start_sig_date": str(update_result.get("signal_date") or ""),
+        "performance": update_result.get("performance", {}),
+        "performance_return": str((update_result.get("performance") or {}).get("return") or ""),
+        "dataframe": dataframe,
         "rows": rows,
         "row_count": len(rows),
-        "trade_mode": "custom_weight",
     }
 
 
@@ -383,34 +433,40 @@ def _load_signal_payload(
     trade_mode: str,
     signal_date: Optional[str] = None,
     signal_path: Optional[str] = None,
-) -> Tuple[Optional[Dict[str, float]], Optional[str]]:
+) -> Tuple[Optional[Dict[str, float]], Optional[Dict[str, str]], Optional[str]]:
     resolved_signal_path = signal_path
     if not resolved_signal_path:
         resolved_signal_path = _signal_csv_path_by_date(strategy, trade_mode, signal_date) if signal_date else _latest_dated_signal_csv_path(strategy, trade_mode)
 
     if not resolved_signal_path:
-        return None, f"找不到可用的 signal: {trade_mode}"
+        return None, None, f"找不到可用的 signal: {trade_mode}"
 
     if not os.path.exists(resolved_signal_path):
-        return None, f"找不到可用的 signal: {resolved_signal_path}"
+        return None, None, f"找不到可用的 signal: {resolved_signal_path}"
 
     signal_df = _read_csv_df(resolved_signal_path, SIGNAL_HEADERS)
     if signal_df.empty:
-        return None, f"找不到可用的 signal: {resolved_signal_path}"
+        return None, None, f"找不到可用的 signal: {resolved_signal_path}"
 
     payload: Dict[str, float] = {}
+    buy_reason_map: Dict[str, str] = {}
     for row in signal_df.to_dict(orient="records"):
         stock = str(row.get("stock") or "").strip()
         if not stock:
             continue
         payload[stock] = _safe_float(row.get("position"), 0.0)
+        buy_reason_map[stock] = str(row.get("buy_reason") or "").strip()
 
     if not payload:
-        return None, "signal.csv 沒有可用股票資料"
-    return payload, None
+        return None, None, "signal.csv 沒有可用股票資料"
+    return payload, buy_reason_map, None
 
 
-def _build_holding_rows_from_performance(holdings_performance: List[Dict[str, Any]], signal_date: str) -> List[Dict[str, Any]]:
+def _build_holding_rows_from_performance(
+    holdings_performance: List[Dict[str, Any]],
+    signal_date: str,
+    buy_reason_map: Optional[Dict[str, str]] = None,
+) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
 
     for index, holding in enumerate(holdings_performance):
@@ -424,6 +480,7 @@ def _build_holding_rows_from_performance(holdings_performance: List[Dict[str, An
         rows.append(
             {
                 "stock": stock,
+                "buy_reason": str((buy_reason_map or {}).get(stock) or holding.get("buy_reason") or "").strip(),
                 "entry_sig_date": _normalize_date_value(holding.get("entry_sig_date"), signal_date),
                 "exit_sig_date": str(holding.get("exit_sig_date") or ""),
                 "entry_date": str(holding.get("entry_date") or signal_date),
@@ -443,9 +500,17 @@ def _build_holding_rows_from_performance(holdings_performance: List[Dict[str, An
     return rows
 
 
-def _resolve_holding_rows(report_data: Dict[str, Any], signal_date: str) -> List[Dict[str, Any]]:
+def _resolve_holding_rows(
+    report_data: Dict[str, Any],
+    signal_date: str,
+    buy_reason_map: Optional[Dict[str, str]] = None,
+) -> List[Dict[str, Any]]:
     holdings_performance = report_data.get("holdings_performance", []) if isinstance(report_data, dict) else []
-    return _build_holding_rows_from_performance(holdings_performance=holdings_performance, signal_date=signal_date)
+    return _build_holding_rows_from_performance(
+        holdings_performance=holdings_performance,
+        signal_date=signal_date,
+        buy_reason_map=buy_reason_map,
+    )
 
 
 def _apply_backtest_to_holding(
@@ -453,10 +518,15 @@ def _apply_backtest_to_holding(
     trade_mode: str,
     signal_date: str,
     report_data: Dict[str, Any],
+    buy_reason_map: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     holding_path = _holding_csv_path_by_date(strategy, trade_mode, signal_date)
 
-    holding_rows = _resolve_holding_rows(report_data=report_data, signal_date=signal_date)
+    holding_rows = _resolve_holding_rows(
+        report_data=report_data,
+        signal_date=signal_date,
+        buy_reason_map=buy_reason_map,
+    )
 
     holding_df = pd.DataFrame(holding_rows, columns=HOLDING_HEADERS)
     if holding_df.empty:
@@ -511,7 +581,7 @@ def update_stock_holding(
         if not signal_date:
             continue
 
-        signal_payload, signal_error = _load_signal_payload(
+        signal_payload, signal_buy_reasons, signal_error = _load_signal_payload(
             strategy=strategy,
             trade_mode=mode,
             signal_path=monthly_signal_path,
@@ -541,6 +611,7 @@ def update_stock_holding(
             trade_mode=mode,
             signal_date=end_date,
             report_data=report_data,
+            buy_reason_map=signal_buy_reasons,
         )
         mode_results[mode] = apply_result
         updated_modes.append(mode)

@@ -3,9 +3,10 @@ from typing import List, Literal, Optional
 
 class Task(BaseModel):
     symbol: str = Field(description="The stock symbol related to this task, must be integer string like '2330', '2455', '3491'")
-    task_type: Literal["ANALYSIS", "VERIFICATION"] = Field(None, description="Type of the technical task")
+    task_type: Literal["ANALYSIS", "VERIFICATION", "HYBRID"] = Field(None, description="Type of task")
     # task: str = Field(description="Detailed description of the task")
     buy_reason: Optional[str] = Field(None, description="The reason for recommending a buy action, if task_type is VERIFICATION else None")
+    selected: bool = Field(False, description="Whether this symbol is selected in both previous and current period")
     company_info: Optional[str] = Field(None, description="Company basic information")
 
 class CoordinatorOutput(BaseModel):
@@ -34,11 +35,12 @@ class FinancialVerificationReport(BaseModel):
     signal: Literal["strong_buy", "buy", "neutral", "sell", "strong_sell"] = Field(description="Investment recommendation based on the financial analysis")
     confidence_score: int = Field(description="Confidence score for the investment recommendation, ranging from 0 to 10")
     buy_reason: str = Field(description="The reason for recommending a buy action, if applicable")
+    selected: bool = Field(False, description="True only when this symbol is selected in both previous and current period")
     review_comment: str = Field(description="The financial analyst's reflection and review comment for the buy_reason")
     report: str = Field(description="The result of the verification process for the given financial task")
 
 class FinancialOutput(BaseModel):
-    """Respond to the user with financial_analysis_reports when the task_type is ANALYSIS, or financial_verification_reports when the task_type is VERIFICATION"""
+    """Respond with analysis for ANALYSIS, verification for VERIFICATION, and both for HYBRID."""
     financial_analysis_reports: List[FinancialAnalysisReport] = Field(None, description="Financial analyst outputs for analysis")
     financial_verification_reports: List[FinancialVerificationReport] = Field(None, description="Financial analyst reflections for verification")
 
@@ -53,11 +55,12 @@ class NewsVerificationReport(BaseModel):
     signal: Literal["strong_buy", "buy", "neutral", "sell", "strong_sell"] = Field(description="Investment recommendation based on the news analysis")
     confidence_score: int = Field(description="Confidence score for the investment recommendation, ranging from 0 to 10")
     buy_reason: str = Field(description="The reason for recommending a buy action, if applicable")
+    selected: bool = Field(False, description="True only when this symbol is selected in both previous and current period")
     review_comment: str = Field(description="The news analyst's reflection and review comment for the buy_reason")
     report: str = Field(description="The result of the verification process for the given news task")
 
 class NewsOutput(BaseModel):
-    """Respond to the user with news_analysis_reports when the task_type is ANALYSIS, or news_verification_reports when the task_type is VERIFICATION"""
+    """Respond with analysis for ANALYSIS, verification for VERIFICATION, and both for HYBRID."""
     news_analysis_reports: List[NewsAnalysisReport] = Field(None, description="News analyst outputs for analysis")
     news_verification_reports: List[NewsVerificationReport] = Field(None, description="News analyst reflections for verification")
 
@@ -78,11 +81,12 @@ class TechnicalVerificationReport(BaseModel):
     signal: Literal["strong_buy", "buy", "neutral", "sell", "strong_sell"] = Field(description="Investment recommendation based on the technical analysis")
     confidence_score: int = Field(description="Confidence score for the investment recommendation, ranging from 0 to 10")
     buy_reason: str = Field(description="The reason for recommending a buy action, if applicable")
+    selected: bool = Field(False, description="True only when this symbol is selected in both previous and current period")
     review_comment: str = Field(description="The technical analyst's reflection and review comment for the buy_reason")
     report: str = Field(description="The result of the verification process for the given technical task")
 
 class TechnicalOutput(BaseModel):
-    """Respond to the user with technical_analysis_reports when the task_type is ANALYSIS, or technical_verification_reports when the task_type is VERIFICATION"""
+    """Respond with analysis for ANALYSIS, verification for VERIFICATION, and both for HYBRID."""
     technical_analysis_reports: List[TechnicalAnalysisReport] = Field(None, description="Technical analyst outputs for analysis")
     technical_verification_reports: List[TechnicalVerificationReport] = Field(None, description="Technical analyst reflections for verification")
 
@@ -91,7 +95,6 @@ class PortfolioDecision(BaseModel):
     symbol: str = Field(description="The stock symbol related to this portfolio decision")
     stock_type: Literal["growth", "value", "turnaround", "thematic"] = Field(description="The identified stock type based on the integrated analysis")
     stock_type_classification_rationale: str = Field(description="The rationale behind classifying the stock into a specific type")
-    action: Literal["buy", "hold", "sell"] = Field(description="The trading action decided by the portfolio manager for the next trading day")
     position: float = Field(description="The target position size for the given stock symbol, represented as a percentage of the total portfolio (e.g., 0.1 for 10%)")
     confidence_score: int = Field(description="Confidence score for the trading action, ranging from 0 to 10")
     rationale: str = Field(description="Detailed rationale behind the portfolio manager's trading decision for the given stock symbol")

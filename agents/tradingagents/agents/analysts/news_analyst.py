@@ -15,7 +15,7 @@ from tradingagents.agents.utils.agent_output_formats import (
     NewsOutput,
     Task,
 )
-from tradingagents.agents.utils.agent_utils import get_tools, get_company_info, search_news
+from tradingagents.agents.utils.agent_utils import get_tools, get_company_news
 from tradingagents.agents.utils.graph_helpers import clear_messages
 from tradingagents.agents.utils.agent_states import NewsState
 
@@ -24,7 +24,7 @@ from tradingagents.agents.utils.agent_states import NewsState
 def create_news_analyst(llm):
     """回傳 News Analyst 的 compiled subgraph。"""
     tools = [
-        # search_news,
+        # get_company_news,
         NewsOutput,
     ]
 
@@ -59,6 +59,8 @@ def create_news_analyst(llm):
                     "你可以使用下列工具: {tool_names}\n\n"
                     "任務指引: task_type 為 {task_type}。"
                     "若 task_type 是 VERIFICATION，代表這是庫存股，你必須驗證購買理由「{buy_reason}」有沒有符合預期，並偵測盲點，確認沒有忽略其他狀況。\n\n"
+                    "若 task_type 是 HYBRID，代表這支股票上期與本期都被選到，你必須"
+                    "驗證既有 buy_reason（輸出 news_verification_reports，selected 必須是 true）\n\n"
                     "投資建議標準:\n"
                     "- strong_buy: 事件顯著提升長期競爭力或護城河\n"
                     "- buy: 有成長催化，但存在短期不確定性\n"
@@ -70,13 +72,6 @@ def create_news_analyst(llm):
                 MessagesPlaceholder(variable_name="messages"),
             ]
         )
-
-        print("News Analyst received task dict:", task)
-        print("News Analyst received end_date:", end_date)
-        print("News Analyst available symbol", task.symbol)
-        print("News Analyst available task_type", task.task_type)
-        print("News Analyst available buy_reason", task.buy_reason)
-        print("News Analyst available company_info", task.company_info)
 
         prompt = prompt.partial(
             symbol=task.symbol,

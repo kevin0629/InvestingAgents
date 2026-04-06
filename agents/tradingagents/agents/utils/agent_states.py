@@ -12,6 +12,9 @@ def _last_value(a, b):
 class DistributorState(MessagesState):
     end_date: str
     strategy: str
+    pre_market_performance: str
+    pre_strategy_performance: str
+    pre_performance: str
     financial_tasks: Annotated[List[Task], operator.add]
     technical_tasks: Annotated[List[Task], operator.add]
     news_tasks: Annotated[List[Task], operator.add]
@@ -41,24 +44,35 @@ class MacroState(MessagesState):
 
 
 class CriticState(MessagesState):
+    strategy: str
+    end_date: str
     financial_verification_reports: List[FinancialVerificationReport]
     technical_verification_reports: List[TechnicalVerificationReport]
     news_verification_reports: List[NewsVerificationReport]
+    macro_analysis_report: MacroAnalysisReport
+    pre_market_performance: str
+    pre_strategy_performance: str
+    pre_performance: str
     critic_reflections: Annotated[List[str], operator.add]
 
 class PortfolioState(MessagesState):
     strategy: str
     end_date: str
-    critic_reflections: List[str]
     # Analysis reports（新標的）
     financial_analysis_reports: List[FinancialAnalysisReport]
     technical_analysis_reports: List[TechnicalAnalysisReport]
     news_analysis_reports: List[NewsAnalysisReport]
     macro_analysis_report: MacroAnalysisReport
+    financial_verification_reports: List[FinancialVerificationReport]
+    technical_verification_reports: List[TechnicalVerificationReport]
+    news_verification_reports: List[NewsVerificationReport]
 
 class AgentState(MessagesState):
     strategy: Annotated[str, "Investment strategy to follow, e.g. monthly_revenue_growth_roe"]
     end_date: Annotated[str, _last_value]
+    pre_market_performance: Annotated[str, _last_value]
+    pre_strategy_performance: Annotated[str, _last_value]
+    pre_performance: Annotated[str, _last_value]
 
     technical_tasks: Annotated[List[Task], operator.add]
     financial_tasks: Annotated[List[Task], operator.add]

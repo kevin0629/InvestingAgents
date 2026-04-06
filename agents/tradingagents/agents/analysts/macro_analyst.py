@@ -13,7 +13,7 @@ from tradingagents.agents.utils.agent_output_formats import MacroAnalysisReport
 from tradingagents.agents.utils.agent_utils import (
     get_tools,
     get_taiex_data,
-    search_news
+    get_macro_news,
 )
 from tradingagents.agents.utils.graph_helpers import clear_messages
 from tradingagents.agents.utils.agent_states import MacroState
@@ -24,7 +24,7 @@ def create_macro_analyst(llm):
     """回傳 Macro Analyst 的 compiled subgraph。"""
     tools = [
         get_taiex_data,
-        # search_news,
+        # get_macro_news,
         MacroAnalysisReport,
     ]
     tool_names = get_tools(tools)
@@ -49,12 +49,7 @@ def create_macro_analyst(llm):
                     "- 若訊號出現矛盾（例如：經濟轉弱但股市上漲），必須明確指出並解釋\n"
                     "所有工具呼叫的 end_date 參數皆必須設為 {end_date}，為本次資料分析截止日期，嚴禁使用截止日期以後的資料。\n"
                     "你可以使用下列工具: {tool_names}\n\n"
-                    "先使用 get_taiex_data 評估大盤趨勢，再使用 search_news 補充總經、政策、產業面催化與風險。\n"
-                    "search_news 應使用市場層級查詢，避免個股導向，例如：\n"
-                    "- 台灣央行 利率 政策\n"
-                    "- 美國 CPI 聯準會 降息\n"
-                    "- 半導體 景氣 循環 庫存\n"
-                    "- 台股 外資 期貨 匯率\n\n"
+                    "先使用 get_taiex_data 評估大盤趨勢，再使用 get_macro_news 補充總經、政策、產業面催化與風險。\n"
                     "評等標準：\n"
                     "- strong_buy: 風險偏好明顯改善，且宏觀驅動普遍偏多\n"
                     "- buy: 整體環境偏多但仍有可控風險\n"

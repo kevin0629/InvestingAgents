@@ -7,7 +7,6 @@ from tradingagents.agents.utils.stock_data_tools import (
 )
 
 from tradingagents.agents.utils.fundamental_data_tools import (
-    get_company_info,
     get_factors,
     get_balance_sheet,
     get_cashflow,
@@ -17,23 +16,20 @@ from tradingagents.agents.utils.fundamental_data_tools import (
     get_river_chart
 )
 from tradingagents.agents.utils.news_data_tools import (
-    search_news
-)
-from tradingagents.agents.utils.backtest_tools import (
-    get_strategy,
-    get_backtest_report
+    get_company_news,
+    get_macro_news
 )
 from tradingagents.agents.utils.reflection_data_tools import (
-    store_reflection,
+    store_reflections,
     retrieve_reflections
 )
+from tradingagents.agents.utils.trading_tools import create_stock_holding
 
 __all__ = [
     "create_msg_delete",
     "get_tools",
     "get_stock_data",
     "get_taiex_data",
-    "get_company_info",
     "get_factors",
     "get_balance_sheet",
     "get_cashflow",
@@ -41,11 +37,11 @@ __all__ = [
     "get_monthly_revenue",
     "get_dupont_analysis",
     "get_river_chart",
-    "search_news",
-    "get_strategy",
-    "get_backtest_report",
-    "store_reflection",
+    "get_company_news",
+    "get_macro_news",
+    "store_reflections",
     "retrieve_reflections",
+    "create_stock_holding",
 ]
 
 

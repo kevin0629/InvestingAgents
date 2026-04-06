@@ -1,10 +1,9 @@
 from typing import Annotated
 
 # Import from vendor-specific modules
-from .news_utils import search_news_for_agent, get_company_news, get_macro_news
+from .news_utils import get_company_news, get_macro_news
 from .stock_utils import get_stock_chart, get_taiex_chart
 from .fundamentals_utils import (
-    get_company_by_symbol, 
     get_company_factors, 
     get_company_balance_sheet, 
     get_company_cash_flow_statement, 
@@ -13,8 +12,8 @@ from .fundamentals_utils import (
     get_dupont_analysis,
     get_stock_river_chart
 )
-from .backtest_utils import get_strategy, get_backtest_report
-from .reflection_utils import store_reflection, retrieve_reflections
+from .reflection_utils import store_reflections, retrieve_reflections
+from .account_utils import create_stock_holding
 
 # Configuration and routing logic
 from .config import get_config
@@ -31,7 +30,6 @@ TOOLS_CATEGORIES = {
     "fundamental_data": {
         "description": "Company fundamentals",
         "tools": [
-            "get_company_info",
             "get_factors",
             "get_balance_sheet",
             "get_cashflow",
@@ -44,24 +42,21 @@ TOOLS_CATEGORIES = {
     "news_data": {
         "description": "News data",
         "tools": [
-            "get_company_info",
-            "search_news",
             "get_company_news",
             "get_macro_news"
-        ]
-    },
-    "backtest_data": {
-        "description": "Backtesting strategy and reports",
-        "tools": [
-            "get_strategy",
-            "get_backtest_report"
         ]
     },
     "reflection_data": {
         "description": "Reflection data storage and retrieval",
         "tools": [
-            "store_reflection",
-            "retrieve_reflection"
+            "store_reflections",
+            "retrieve_reflections"
+        ]
+    },
+    "account_data": {
+        "description": "Stock holding information",
+        "tools": [
+            "create_stock_holding"
         ]
     }
 }
@@ -80,9 +75,6 @@ VENDOR_METHODS = {
         "myself": get_taiex_chart,
     },
     # fundamental_data
-    "get_company_info": {
-        "myself": get_company_by_symbol,
-    },
     "get_factors": {
         "myself": get_company_factors,
     },
@@ -105,28 +97,22 @@ VENDOR_METHODS = {
         "myself": get_stock_river_chart,
     },
     # news_data
-    "search_news": {
-        "myself": search_news_for_agent,
-    },
     "get_company_news": {
         "myself": get_company_news,
     },
     "get_macro_news": {
         "myself": get_macro_news,
     },
-    # backtest_data
-    "get_strategy": {
-        "myself": get_strategy,
-    },
-    "get_backtest_report": {
-        "myself": get_backtest_report,
-    },
     # reflection_data
-    "store_reflection": {
-        "myself": store_reflection,
+    "store_reflections": {
+        "myself": store_reflections,
     },
-    "retrieve_reflection": {
+    "retrieve_reflections": {
         "myself": retrieve_reflections,
+    },
+    # account_data
+    "create_stock_holding": {
+        "myself": create_stock_holding,
     },
 }
 

@@ -66,14 +66,15 @@ class BacktestService:
     def run_backtest(
         self,
         strategy_name: str,
+        start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        parameters: Optional[Dict[str, Any]] = None
     ) -> BacktestReportResponse:
         """
         執行回測
         
         Args:
             strategy_name: 策略名稱
+            start_date: 開始日期
             end_date: 結束日期
             parameters: 策略參數
             
@@ -86,7 +87,7 @@ class BacktestService:
         
         # 獲取策略配置
         strategy_config = self.AVAILABLE_STRATEGIES[strategy_name]
-        strategy_params = parameters or strategy_config.get("parameters", {})
+        strategy_params = strategy_config.get("parameters", {})
         
         # 設置日期範圍
         if not end_date:
@@ -94,7 +95,7 @@ class BacktestService:
         
         # 根據策略名稱執行相應的策略
         if strategy_name == "monthly_revenue_growth_roe":
-            strategy_signal = self._execute_monthly_revenue_growth_roe_strategy(strategy_params, end_date=end_date)
+            strategy_signal = self._execute_monthly_revenue_growth_roe_strategy(strategy_params, start_date=start_date, end_date=end_date)
         else:
             raise ValueError(f"策略 '{strategy_name}' 尚未實現")
         
@@ -117,12 +118,13 @@ class BacktestService:
             message=f"回測完成: 截止日 {end_date}"
         )
     
-    def _execute_monthly_revenue_growth_roe_strategy(self, parameters: Dict[str, Any], end_date: Optional[str] = None) -> pd.DataFrame:
+    def _execute_monthly_revenue_growth_roe_strategy(self, parameters: Dict[str, Any], start_date: Optional[str] = None, end_date: Optional[str] = None) -> pd.DataFrame:
         """
         執行穩健營收動能策略
         
         Args:
             parameters: 策略參數
+            start_date: 開始日期
             end_date: 結束日期
         Returns:
             策略信號 DataFrame
@@ -161,6 +163,10 @@ class BacktestService:
         
         # 選股: 在符合條件的股票中，選 ROE 最高的 top_n 檔
         strategy_signal = roe[final_condition].is_largest(top_n)
+
+        # start_date 處理
+        if start_date:
+            strategy_signal = strategy_signal[strategy_signal.index >= pd.to_datetime(start_date)]
 
         # end_date 處理
         if end_date:

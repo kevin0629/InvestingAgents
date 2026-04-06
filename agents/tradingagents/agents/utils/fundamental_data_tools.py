@@ -18,7 +18,7 @@ def get_company_info(
 ) -> str:
     """
     Retrieve company information for a given symbol symbol.
-    Uses the configured fundamental_data vendor.
+
     Args:
         symbol (str): Stock symbol of the company, e.g. 2330, 2455, 3491
     Returns:

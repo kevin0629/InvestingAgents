@@ -7,6 +7,7 @@ import pandas as pd
 
 def get_backtest_report(
     strategy_name: str,
+    start_date: Optional[str] = None,
     end_date: Optional[str] = None
 ) -> Dict[str, Any]:
     """
@@ -14,6 +15,7 @@ def get_backtest_report(
 
     Args:
         strategy_name: 策略名稱，例如 "monthly_revenue_growth_roe"
+        start_date: 回測開始日期 (YYYY-MM-DD format), 如果為 None 則使用最早資料
         end_date: 回測結束日期 (YYYY-MM-DD format), 如果為 None 則使用最新資料
 
     Returns:
@@ -26,30 +28,14 @@ def get_backtest_report(
     url = f"{base_url}/backtest/report"
     
     params = {"strategy_name": strategy_name}
+    if start_date:
+        params["start_date"] = start_date
     if end_date:
         params["end_date"] = end_date
     
     response = requests.get(url, params=params)
     response.raise_for_status()
 
-    # performance = response.json().get("performance", {})
-    # next_holdings = response.json().get("current_holdings", [])
-
-    # header = f"## 策略回測報告: {strategy_name}\n\n"
-
-    # content = "### 策略歷史績效(自2005年起)\n"
-    # for key, value in performance.items():
-    #     content += f"{key}: {value}, "
-
-    # for holding in next_holdings:
-    #     if isinstance(holding, dict):
-    #         holding.pop("entry_price", None)
-    #         holding.pop("entry_date", None)
-            
-    # content += "\n### 下期交易訊號\n"
-    # content += pd.DataFrame(next_holdings).to_csv(index=False)
-
-    # return header + content
     return response.json()
 
 
@@ -71,20 +57,7 @@ def get_strategy() -> Dict[str, str]:
     response = requests.get(url)
     response.raise_for_status()
     data = response.json()
-    # data = response.json().get("strategies", [])
 
-    # header = "## 可用策略列表\n"
-
-    # content = ""
-    # for strategy in data:
-    #     for key, value in strategy.items():
-    #         if key == "name":
-    #             content += value
-    #         elif key == "description":
-    #             content += f", {key}: {value}\n"
-    #             break
-
-    # return header + content
     return data
 
 
@@ -110,20 +83,21 @@ def get_backtest_sim(
 
 
 def get_market_return(
-    entry_sig_date: str,
-    exit_sig_date: str,
+    start_date: str,
+    end_date: str,
 ) -> Dict[str, Any]:
-    """呼叫 /backtest/cal_market_return 取得大盤績效。"""
+    """呼叫 /backtest/cal_market_return 取得大盤績效"""
     base_url = get_backend_base_url()
     url = f"{base_url}/backtest/cal_market_return"
 
     params: Dict[str, Any] = {
-        "entry_sig_date": entry_sig_date,
-        "exit_sig_date": exit_sig_date,
+        "start_date": start_date,
+        "end_date": end_date,
     }
 
     response = requests.get(url, params=params)
     response.raise_for_status()
+
     return response.json()
 
 

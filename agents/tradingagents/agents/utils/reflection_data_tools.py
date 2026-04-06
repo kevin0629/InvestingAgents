@@ -1,104 +1,98 @@
 import json
-from datetime import datetime, timezone
-from typing import Annotated, Any, Dict, List, Optional, Tuple
+from typing import Annotated
 
 from langchain_core.tools import tool
 
-from tradingagents.dataflows.config import get_config
-from tradingagents.dataflows.reflection_utils import retrieve_reflections, store_reflection
 from tradingagents.dataflows.interface import route_to_vendor
 
-_EMBEDDER = None
-_EMBEDDER_KEY = None
-
-
-def _resolved_config(extra_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    merged = get_config()
-    if extra_config:
-        merged.update(extra_config)
-    return merged
-
-
-def _provider(config: Dict[str, Any]) -> str:
-    provider = str(config.get("embedding_provider", "openai")).strip().lower()
-    if provider in {"google", "gemini"}:
-        return "gemini"
-    return "openai"
-
-
-def _get_embedder(config: Dict[str, Any]):
-    global _EMBEDDER, _EMBEDDER_KEY
-
-    provider = _provider(config)
-    if provider == "gemini":
-        model_name = config.get("gemini_embedding_model", "gemini-embedding-001")
-        key = (provider, model_name, None)
-    else:
-        model_name = config.get("openai_embedding_model", "text-embedding-3-small")
-        backend_url = config.get("backend_url")
-        key = (provider, model_name, backend_url)
-
-    if _EMBEDDER is not None and _EMBEDDER_KEY == key:
-        return _EMBEDDER
-
-    if provider == "gemini":
-        from langchain_google_genai import GoogleGenerativeAIEmbeddings
-
-        _EMBEDDER = GoogleGenerativeAIEmbeddings(model=model_name, output_dimensionality=1536) # default dimensionality is 3072
-    else:
-        from langchain_openai import OpenAIEmbeddings
-
-        if key[2]:
-            _EMBEDDER = OpenAIEmbeddings(model=model_name, base_url=key[2])
-        else:
-            _EMBEDDER = OpenAIEmbeddings(model=model_name)
-
-    _EMBEDDER_KEY = key
-    return _EMBEDDER
-
-
-def embed_text(text: str, config: Optional[Dict[str, Any]] = None) -> List[float]:
-    resolved = _resolved_config(config)
-    return _get_embedder(resolved).embed_query(text)
 
 
 @tool
 def retrieve_reflections(
-    query: Annotated[str, "Query text for retrieving reflections"],
-    strategy: Annotated[str, "Optional filter conditions, e.g. monthly_revenue_growth_roe"] = None,
-) -> List[Dict[str, Any]]:
+    query_text: Annotated[str, "Text query used to search similar historical reflections"],
+    strategy: Annotated[str, "Optional strategy filter, e.g. monthly_revenue_growth_roe"] = None,
+    end_date: Annotated[str, "End date in yyyy-mm-dd format"] = None,
+) -> str:
     """
-    Retrieve reflection data for a given query.
+    Retrieve historical reflections by semantic similarity with optional filters.
 
     Args:
-        query (str): Query text for retrieving reflections
-        strategy (str): Optional filter conditions, e.g. monthly_revenue_growth_roe
+        query_text (str): Natural language query used for vector retrieval.
+        strategy (str): Optional strategy filter.
+        end_date (str): End date in yyyy-mm-dd format.
+
     Returns:
-        List[Dict[str, Any]]: A list of reflection data dictionaries
+        str: Formatted reflection summary text.
     """
-    query_embedding = embed_text(query)
-    filter_conditions = {"strategy": strategy} if strategy else None
-    return route_to_vendor("retrieve_reflections", query_embedding, filter_conditions)
+    filter_conditions = {}
+    if strategy:
+        filter_conditions["strategy"] = strategy
+    if end_date:
+        filter_conditions["date"] = end_date
+
+    return route_to_vendor("retrieve_reflections", query_text, filter_conditions or None)
 
 
 @tool
-def store_reflection(
-    reflection_text: Annotated[str, "Reflection text to store"],
-    strategy: Annotated[str, "Optional filter conditions, e.g. monthly_revenue_growth_roe"] = None,
+def store_reflections(
+    reflection_text: Annotated[str, "Single reflection text"] = "",
+    reflection_texts_json: Annotated[str, "Optional JSON list of reflection texts, e.g. [\"text1\", \"text2\"]"] = "",
+    strategy: Annotated[str, "Strategy tag for this reflection"] = "",
+    end_date: Annotated[str, "End date in yyyy-mm-dd format"] = "",
+    metadata_json: Annotated[str, "Optional extra metadata as JSON object string"] = "",
 ) -> str:
     """
-    Store reflection data to Qdrant.
-    
+    Store reflections (single or batch) to Qdrant/JSONL fallback.
+    - Reflection content can come from:
+      1) `reflection_text` for single insert
+      2) `reflection_texts_json` for batch insert
+
     Args:
-        reflection_text: Reflection text to store
-        strategy: Optional filter conditions, e.g. monthly_revenue_growth_roe
-        
+        reflection_text (str): Single reflection text.
+        reflection_texts_json (str): Optional JSON list of reflection texts.
+        strategy (str): Strategy tag.
+        end_date (str): End date in yyyy-mm-dd format.
+        metadata_json (str): Optional additional metadata JSON object string.
+
     Returns:
-        str: "Stored in Qdrant with ID: " + reflection_id
-        
-    Raises:
-        Exception: If both Qdrant and JSONL fallback fail
+        str: Storage status message.
     """
-    reflection_embedding = embed_text(reflection_text)
-    metadata = {"strategy": strategy} if strategy else None
-    return route_to_vendor("store_reflection", reflection_text, reflection_embedding, metadata)
+    metadata = {}
+    if metadata_json:
+        try:
+            parsed = json.loads(metadata_json)
+            if isinstance(parsed, dict):
+                metadata.update(parsed)
+        except json.JSONDecodeError:
+            # Keep metadata empty on invalid JSON to avoid breaking the tool call.
+            pass
+
+    if strategy:
+        metadata["strategy"] = strategy
+    if end_date:
+        metadata["date"] = end_date
+
+    # Batch mode: list of reflection strings with shared metadata.
+    if reflection_texts_json:
+        try:
+            parsed_batch = json.loads(reflection_texts_json)
+        except json.JSONDecodeError:
+            return "Invalid reflection_texts_json: must be a valid JSON list"
+
+        if not isinstance(parsed_batch, list):
+            return "Invalid reflection_texts_json: must be a JSON list"
+
+        normalized_batch = []
+        for index, row in enumerate(parsed_batch):
+            row_text = str(row or "").strip()
+            if not row_text:
+                return f"Invalid reflection_texts_json[{index}]: text is required"
+            normalized_batch.append(row_text)
+
+        return route_to_vendor("store_reflections", normalized_batch, metadata or None)
+
+    # Single mode.
+    if not reflection_text.strip():
+        return "reflection_text is required when reflection_texts_json is empty"
+
+    return route_to_vendor("store_reflections", reflection_text, metadata or None)

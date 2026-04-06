@@ -16,34 +16,53 @@ from tradingagents.agents.utils.agent_output_formats import (
 )
 from tradingagents.agents.utils.graph_helpers import clear_messages
 from tradingagents.agents.utils.agent_states import PortfolioState
-from tradingagents.agents.utils.agent_utils import get_tools
+from tradingagents.agents.utils.agent_utils import (
+    get_tools,
+    create_stock_holding,
+    retrieve_reflections
+)
 
+
+def _filter_selected_verifications(reports):
+    selected_reports = []
+    for report in reports or []:
+        report_selected = False
+        if isinstance(report, dict):
+            report_selected = bool(report.get("selected"))
+        else:
+            report_selected = bool(getattr(report, "selected", False))
+        if report_selected:
+            selected_reports.append(report)
+    return selected_reports
 
 
 def create_portfolio_manager(llm):
     """回傳 Portfolio Manager 的 compiled subgraph。"""
-    tools = [PortfolioDecisions]
+    tools = [
+        create_stock_holding,
+        retrieve_reflections,
+        PortfolioDecisions
+    ]
     tool_names = get_tools(tools)
 
     def portfolio_manager_node(state: PortfolioState):
-        end_date = state.get("end_date", "Unknown")
-        strategy = state.get("strategy", "Unknown")
+        end_date = state.get("end_date")
+        strategy = state.get("strategy")
 
         fin_analysis   = state.get("financial_analysis_reports") or []
         tech_analysis  = state.get("technical_analysis_reports") or []
         news_analysis  = state.get("news_analysis_reports") or []
         macro_analysis = state.get("macro_analysis_report")
-        # fin_verify     = state.get("financial_verification_reports") or []
-        # tech_verify    = state.get("technical_verification_reports") or []
-        # news_verify    = state.get("news_verification_reports") or []
-        # critic_summary = "\n".join(state.get("critic_reflections") or [])
+        fin_verify_selected = _filter_selected_verifications(state.get("financial_verification_reports"))
+        tech_verify_selected = _filter_selected_verifications(state.get("technical_verification_reports"))
+        news_verify_selected = _filter_selected_verifications(state.get("news_verification_reports"))
 
         prompt = ChatPromptTemplate.from_messages(
             [
                 (
                     "system",
                     "你是擁有最終裁量權的投資長，負責整合各分析師的報告，做出最終投資決策，並管理投資組合風險。\n"
-                    "你的目標是目標是建構一個高勝率、高報酬且風險可控的投資組合。\n"
+                    "你的目標是從 {strategy} 策略中，建構一個高勝率、高報酬且風險可控的投資組合。\n"
                     "你的核心目標是：\n"
                     "1. 整合多來源分析\n"
                     "2. 解決分析之間的矛盾\n"
@@ -55,10 +74,15 @@ def create_portfolio_manager(llm):
                     "- 當訊號衝突時，必須明確說明並做出裁決\n\n"
                     "市場情況: {macro_analysis}\n"
                     "本次產生訊號的日期為 {end_date}，會在下個交易日以收盤價做交易\n"
-                    "━━━ 新標的分析報告 ━━━\n"
+                    "股票池分析報告：\n"
                     "財務分析: {fin_analysis}\n"
                     "技術分析: {tech_analysis}\n"
-                    "新聞分析: {news_analysis}\n\n"
+                    "新聞分析: {news_analysis}\n"
+                    "財務驗證分析: {fin_verify_selected}\n"
+                    "技術驗證分析: {tech_verify_selected}\n"
+                    "新聞驗證分析: {news_verify_selected}\n\n"
+                    "你可以使用的工具: {tool_names}\n"
+                    "所有工具呼叫的 end_date 參數皆必須設為 {end_date}，為本次資料分析截止日期，嚴禁使用截止日期以後的資料。\n\n"
                     "決策邏輯:\n"
                     "1. 判斷股票的特性，並給出依據：\n"
                     "   請評估以下四種屬性的成分佔比 (總和 100%)：\n"
@@ -82,12 +106,18 @@ def create_portfolio_manager(llm):
         )
 
         prompt = prompt.partial(
+            strategy=strategy,
             end_date=end_date,
             macro_analysis=macro_analysis,
             fin_analysis=fin_analysis,
             tech_analysis=tech_analysis,
             news_analysis=news_analysis,
+            fin_verify_selected=fin_verify_selected,
+            tech_verify_selected=tech_verify_selected,
+            news_verify_selected=news_verify_selected,
         )
+        prompt = prompt.partial(tool_names=tool_names)
+
         chain = prompt | llm.bind_tools(tools, tool_choice="any")
         
         return {"messages": [chain.invoke(state["messages"])]}

@@ -56,6 +56,8 @@ def create_technical_analyst(llm):
                     "你可以使用下列工具: {tool_names}\n\n"
                     "任務指引: task_type 為 {task_type}。"
                     "若 task_type 是 VERIFICATION，代表這是庫存股，你必須先驗證購買理由「{buy_reason}」有沒有符合預期，並偵測盲點，確認沒有忽略其他狀況，再分析未來並決定是否繼續持有或加碼減碼。\n\n"
+                    "若 task_type 是 HYBRID，代表這支股票上期與本期都被選到，你必須"
+                    "驗證既有 buy_reason（輸出 technical_verification_reports，selected 必須是 true）\n\n"
                     "在分析 {symbol} 的技術面時，請從以下層面全面評估：\n"
                     "1. 趨勢與價位分析: 判斷長期/中期/短期趨勢（上升/下降/盤整），指出關鍵支撐與壓力區間\n"
                     "2. 技術指標分析:\n"
@@ -76,17 +78,11 @@ def create_technical_analyst(llm):
             ]
         )
 
-        print("Technical Analyst received task dict:", task)
-        print("Technical Analyst received end_date:", end_date)
-        print("Technical Analyst available symbol", task.symbol)
-        print("Technical Analyst available task_type", task.task_type)
-        print("Technical Analyst available buy_reason", task.buy_reason)
-
         prompt = prompt.partial(
             symbol=task.symbol,
             end_date=end_date,
             task_type=task.task_type,
-            buy_reason=task.buy_reason if task.task_type == "VERIFICATION" else "N/A",
+            buy_reason=task.buy_reason if task.task_type in {"VERIFICATION", "HYBRID"} else "N/A",
         )
         prompt = prompt.partial(tool_names=tool_names)
 
