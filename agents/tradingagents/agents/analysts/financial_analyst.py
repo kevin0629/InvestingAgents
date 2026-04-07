@@ -95,7 +95,7 @@ def create_financial_analyst(llm):
                     "- neutral: 市場已反映預期\n"
                     "- sell: 基本面轉弱或高估\n"
                     "- strong_sell: 基本面惡化 + 財務警訊\n"
-                    "完成分析後，請使用 FinancialOutput 工具輸出結構化結果。"
+                    "完成分析後，請使用 FinancialOutput 工具輸出結構化結果，此工具只能使用一次，每次使用請確保輸入的資訊完整。"
                 ),
                 MessagesPlaceholder(variable_name="messages"),
             ]

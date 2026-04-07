@@ -3,3 +3,9 @@
 2. 使用 CMD 或 powershell 到 clone 下來的目錄位置，執行以下指令: 
    - `docker volume create qdrant_storage`
    - `docker run -p 6333:6333 -p 6334:6334 -v qdrant_storage:/qdrant/storage qdrant/qdrant`
+
+
+## Langfuse 使用方法
+1. 自 github 上 clone 下來
+2. 將 `LANGFUSE_S3_BATCH_EXPORT_ENABLED` 改為 `true`，這一步務必要做才能匯出
+3. 使用 CMD 或 powershell 到 clone 下來的目錄位置，執行 `docker compose up`

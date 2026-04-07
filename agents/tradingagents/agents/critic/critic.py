@@ -62,7 +62,7 @@ def create_critic(llm):
                     "上一期投資決策表現: {pre_performance}\n"
                     "Financial 、Technical、News Analyst 提供的驗證報告:\n"
                     "{reports_summary}\n"
-                    "你可以使用的工具: {tool_names}\n"
+                    "你可以使用的工具: {tool_names}\n, 在使用`store_reflections`之前務必使用`retrieve_reflections`回顧之前的檢討內容，避免重複內容存入。\n\n"
                     "所有工具呼叫的 end_date 參數皆必須設為 {end_date}，為本次資料分析截止日期，嚴禁使用截止日期以後的資料。\n\n"
                     "分析方法:\n"
                     "Step1: 事實核對\n"

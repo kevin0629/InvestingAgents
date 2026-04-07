@@ -1,7 +1,7 @@
 from typing import Any, Dict
 
 from tradingagents.default_config import DEFAULT_CONFIG
-from agents.tradingagents.graph.trading_graph import TradingAgentsGraph
+from tradingagents.graph.trading_graph import TradingAgentsGraph
 
 
 def build_graph(config: Dict[str, Any] | None = None):

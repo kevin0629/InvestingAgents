@@ -14,18 +14,12 @@ DEFAULT_CONFIG = {
     "backend_url": "https://api.openai.com/v1",  # openai: https://api.openai.com/v1, https://generativelanguage.googleapis.com
     # Provider-specific thinking configuration
     "google_thinking_level": None,      # "high", "minimal", etc.
-    "openai_reasoning_effort": None,    # "medium", "high", "low"
+    "openai_reasoning_effort": "medium",    # "medium", "high", "low"
     "anthropic_effort": None,           # "high", "medium", "low"
     # Embedding settings for persistent reflection Agentic RAG
     "embedding_provider": "google",    # Options: openai, google
     "openai_embedding_model": "text-embedding-3-small",
     "google_embedding_model": "gemini-embedding-001",
-    # Local observability/tracing
-    "langfuse_session_id": None,
-    # Debate and discussion settings
-    "max_debate_rounds": 1,
-    "max_risk_discuss_rounds": 1,
-    "max_recur_limit": 100,
     # Data vendor configuration
     # Category-level configuration (default for all tools in category)
     "data_vendors": {

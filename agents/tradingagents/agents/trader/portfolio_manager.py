@@ -98,8 +98,10 @@ def create_portfolio_manager(llm):
                     "   - Score > 7: Buy\n"
                     "   - Score 5-6: Watchlist\n"
                     "   - Score < 5: Ignore\n\n"
-                    "4. 基於整合後的結論，向使用者提出具體、可操作的建議，並說明背後的邏輯。\n"
-                    "完成決策後，請使用 PortfolioDecisions 工具輸出結構化結果。"
+                    "4. 執行兩階段下單流程以利消融實驗（兩次下單皆需執行）：\n"
+                    "   - 第一次（初始下單）：依整合後的結論呼叫 `create_stock_holding`，此呼叫必須包含參數 `reflection`: false。\n"
+                    "   - 第二次（反思後調整）：接著呼叫 `retrieve_reflections`，取得相關反思要點，將反思融入決策後再次呼叫 `create_stock_holding`，此呼叫必須包含 `reflection`: true。\n"
+                    "5. 完成上述兩階段流程後，使用 PortfolioDecisions 工具輸出結構化結果。"
                 ),
                 MessagesPlaceholder(variable_name="messages"),
             ]

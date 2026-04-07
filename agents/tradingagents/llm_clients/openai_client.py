@@ -20,7 +20,7 @@ class NormalizedChatOpenAI(ChatOpenAI):
 
 # Kwargs forwarded from user config to ChatOpenAI
 _PASSTHROUGH_KWARGS = (
-    "timeout", "max_retries", "reasoning_effort",
+    "timeout", "max_retries", "reasoning",
     "api_key", "callbacks", "http_client", "http_async_client",
 )
 
@@ -36,7 +36,7 @@ class OpenAIClient(BaseLLMClient):
     """Client for OpenAI, Ollama, OpenRouter, and xAI providers.
 
     For native OpenAI models, uses the Responses API (/v1/responses) which
-    supports reasoning_effort with function tools across all model families
+    supports reasoning with function tools across all model families
     (GPT-4.1, GPT-5). Third-party compatible providers (xAI, OpenRouter,
     Ollama) use standard Chat Completions.
     """
