@@ -65,32 +65,6 @@ def get_stock_chart(
     
     return response.content
 
-def get_next_trading_day_close_price(
-    company_symbol: str,
-    end_date: Optional[str] = None
-) -> dict:
-    """
-    獲取指定股票在下一個交易日的日期、收盤價
-    
-    Args:
-        company_symbol: 股票代碼，例如 "2330"
-        end_date: 結束日期 (YYYY-MM-DD format), 如果為 None 則使用最新資料
-
-    Returns:
-        包含下一個交易日日期與收盤價的字典，例如 {"date": "2024-07-01", "close": 600.0}
-    """
-    base_url = get_backend_base_url()
-    url = f"{base_url}/stock/{company_symbol}/next_trading_day_close_price"
-    
-    params = {}
-    if end_date:
-        params["end_date"] = end_date
-    
-    response = requests.get(url, params=params)
-    response.raise_for_status()
-    
-    return response.json()
-
 
 if __name__ == "__main__":
     # Example usage
@@ -112,5 +86,3 @@ if __name__ == "__main__":
 
     # plt.axis('off')
     # plt.show()
-
-    print(get_next_trading_day_close_price(company_symbol, end_date="2020-11-13"))

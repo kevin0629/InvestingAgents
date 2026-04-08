@@ -1,4 +1,4 @@
-from .utils.agent_utils import create_msg_delete
+from .utils.agent_utils import get_tools, clear_messages, handle_image_tool_results
 from .utils.agent_states import AgentState, FinancialState, TechnicalState, NewsState, DistributorState, MacroState, CriticState, PortfolioState
 from .analysts.financial_analyst import create_financial_analyst
 from .analysts.technical_analyst import create_technical_analyst
@@ -18,7 +18,9 @@ __all__ = [
     "MacroState",
     "CriticState",
     "PortfolioState",
-    "create_msg_delete",
+    "get_tools",
+    "clear_messages",
+    "handle_image_tool_results",
     "create_distributor",
     "create_critic",
     "create_portfolio_manager",

@@ -12,10 +12,10 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from tradingagents.agents.utils.agent_output_formats import MacroAnalysisReport
 from tradingagents.agents.utils.agent_utils import (
     get_tools,
+    clear_messages,
     get_taiex_data,
     get_macro_news,
 )
-from tradingagents.agents.utils.graph_helpers import clear_messages
 from tradingagents.agents.utils.agent_states import MacroState
 
 

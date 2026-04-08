@@ -6,6 +6,8 @@ Portfolio Manager 同時接收 AnalysisReport（新標的）與 VerificationRepo
 以及 Critic 的反思教訓，最終輸出投資組合決策。
 """
 
+import json
+
 from langgraph.prebuilt import ToolNode
 from langgraph.graph import StateGraph, START, END
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -14,10 +16,10 @@ from tradingagents.agents.utils.agent_output_formats import (
     PortfolioDecision,
     PortfolioDecisions,
 )
-from tradingagents.agents.utils.graph_helpers import clear_messages
 from tradingagents.agents.utils.agent_states import PortfolioState
 from tradingagents.agents.utils.agent_utils import (
     get_tools,
+    clear_messages,
     create_stock_holding,
     retrieve_reflections
 )
@@ -34,6 +36,59 @@ def _filter_selected_verifications(reports):
         if report_selected:
             selected_reports.append(report)
     return selected_reports
+
+
+def _report_to_markdown(report):
+    if report is None:
+        return ""
+
+    if hasattr(report, "model_dump"):
+        report = report.model_dump()
+    elif hasattr(report, "dict"):
+        report = report.dict()
+
+    if isinstance(report, dict):
+        symbol = report.get("symbol")
+        signal = report.get("signal")
+        confidence = report.get("confidence_score")
+        selected = report.get("selected")
+        report_text = report.get("report")
+        buy_reason = report.get("buy_reason")
+        review_comment = report.get("review_comment")
+
+        lines = []
+        if symbol:
+            lines.append(f"- 標的: {symbol}")
+        if signal:
+            lines.append(f"- 訊號: {signal}")
+        if confidence is not None:
+            lines.append(f"- 信心分數: {confidence}")
+        if selected is not None:
+            lines.append(f"- 是否為前後期共同入選: {selected}")
+        if buy_reason:
+            lines.append(f"- 原始買進理由: {buy_reason}")
+        if review_comment:
+            lines.append(f"- 檢討意見: {review_comment}")
+        if report_text:
+            lines.append("- 報告內容:")
+            lines.append(f"  {report_text}")
+
+        if lines:
+            return "\n".join(lines)
+        return json.dumps(report, ensure_ascii=False, indent=2)
+
+    return str(report)
+
+
+def _reports_to_markdown(title, reports):
+    if not reports:
+        return f"### {title}\n- 無資料"
+
+    chunks = [f"### {title}"]
+    for index, report in enumerate(reports, start=1):
+        chunks.append(f"#### {title} #{index}")
+        chunks.append(_report_to_markdown(report))
+    return "\n\n".join(chunks)
 
 
 def create_portfolio_manager(llm):
@@ -57,30 +112,35 @@ def create_portfolio_manager(llm):
         tech_verify_selected = _filter_selected_verifications(state.get("technical_verification_reports"))
         news_verify_selected = _filter_selected_verifications(state.get("news_verification_reports"))
 
+        macro_markdown = _report_to_markdown(macro_analysis) or "- 無資料"
+        reports_markdown = "\n\n".join(
+            [
+                _reports_to_markdown("財務分析", fin_analysis),
+                _reports_to_markdown("技術分析", tech_analysis),
+                _reports_to_markdown("新聞分析", news_analysis),
+                _reports_to_markdown("財務驗證分析(僅入選標的)", fin_verify_selected),
+                _reports_to_markdown("技術驗證分析(僅入選標的)", tech_verify_selected),
+                _reports_to_markdown("新聞驗證分析(僅入選標的)", news_verify_selected),
+            ]
+        )
+
         prompt = ChatPromptTemplate.from_messages(
             [
                 (
                     "system",
-                    "你是擁有最終裁量權的投資長，負責整合各分析師的報告，做出最終投資決策，並管理投資組合風險。\n"
-                    "你的目標是從 {strategy} 策略中，建構一個高勝率、高報酬且風險可控的投資組合。\n"
-                    "你的核心目標是：\n"
-                    "1. 整合多來源分析\n"
-                    "2. 解決分析之間的矛盾\n"
-                    "3. 評估整體風險與報酬\n"
-                    "4. 做出可執行的投資決策(Buy Only)\n\n"
-                    "你的決策必須遵循以下原則：\n"
-                    "- 採用風險優先原則，若存在重大風險（macro 轉空 / 財務惡化），優先降低評級\n"
-                    "- 採用多訊號整合方法，不得僅依單一分析做決策\n"
-                    "- 當訊號衝突時，必須明確說明並做出裁決\n\n"
-                    "市場情況: {macro_analysis}\n"
-                    "本次產生訊號的日期為 {end_date}，會在下個交易日以收盤價做交易\n"
-                    "股票池分析報告：\n"
-                    "財務分析: {fin_analysis}\n"
-                    "技術分析: {tech_analysis}\n"
-                    "新聞分析: {news_analysis}\n"
-                    "財務驗證分析: {fin_verify_selected}\n"
-                    "技術驗證分析: {tech_verify_selected}\n"
-                    "新聞驗證分析: {news_verify_selected}\n\n"
+                    "你是擁有最終裁量權的投資長，負責在既定策略下做風險控管導向的選股決策。\n"
+                    "策略背景：候選股票池已由 {strategy} 策略先行篩出；你的任務是整合各分析師的報告並從該股票池中挑選高品質標的。\n"
+                    "目標：在可控風險下，追求績效同時贏過大盤與 {strategy} 策略原始績效。\n"
+                    "本次產生訊號的日期為 {end_date}，會在下個交易日以收盤價做交易。\n\n"
+                    "風險控管與決策原則：\n"
+                    "1. 不做分批建倉、減倉、停損、停利等交易管理設定；本輪只做 Buy / Ignore。\n"
+                    "2. 對沒有信心或證據不足的標的，不得買進。\n"
+                    "3. 採用風險優先原則：若宏觀轉弱、財務惡化、或訊號衝突無法合理化，應降評或忽略。\n"
+                    "4. 採用多訊號整合：財務、技術、新聞必須交叉驗證，且需把宏觀情境融入三者判讀。\n"
+                    "5. 當訊號衝突時，必須明確寫出矛盾點與裁決依據。\n\n"
+                    "以下提供整理好的報告，請直接閱讀其內容做判斷。\n"
+                    "## 宏觀分析\n{macro_markdown}\n\n"
+                    "## 股票池報告彙整\n{reports_markdown}\n\n"
                     "你可以使用的工具: {tool_names}\n"
                     "所有工具呼叫的 end_date 參數皆必須設為 {end_date}，為本次資料分析截止日期，嚴禁使用截止日期以後的資料。\n\n"
                     "決策邏輯:\n"
@@ -94,13 +154,12 @@ def create_portfolio_manager(llm):
                     "   範例：\n"
                     "   - 矛盾點: Financial Analyst 警告股價嚴重高估，但 Technical Analyst 指出均線多頭排列且動能強勁\n"
                     "   - 協調裁決: 鑑於該股目前處於「投機股」屬性，我們暫時忽略估值過高問題，優先順勢操作，但設定嚴格停損\n"
-                    "3. 部位管理 (依信心分數 0-10):\n"
+                    "3. 買進門檻 (依信心分數 0-10):\n"
                     "   - Score > 7: Buy\n"
-                    "   - Score 5-6: Watchlist\n"
-                    "   - Score < 5: Ignore\n\n"
-                    "4. 執行兩階段下單流程以利消融實驗（兩次下單皆需執行）：\n"
-                    "   - 第一次（初始下單）：依整合後的結論呼叫 `create_stock_holding`，此呼叫必須包含參數 `reflection`: false。\n"
-                    "   - 第二次（反思後調整）：接著呼叫 `retrieve_reflections`，取得相關反思要點，將反思融入決策後再次呼叫 `create_stock_holding`，此呼叫必須包含 `reflection`: true。\n"
+                    "   - Score <= 7: Ignore\n"
+                    "4. 執行兩階段下單流程，每個階段皆只能做一次來模擬真實環境，請務必考量所有股票後再做決策，若沒有要下單的標的此階段可以跳過：\n"
+                    "   - 第一次：依整合後的結論呼叫 `create_stock_holding`，此呼叫必須包含參數 `reflection`: false。\n"
+                    "   - 第二次：接著呼叫 `retrieve_reflections`，要查詢較通用的邏輯，例如財務/技術/新聞/宏觀/產業的反思，不要查個股；將反思融入決策後再次呼叫 `create_stock_holding`，此呼叫必須包含 `reflection`: true。\n"
                     "5. 完成上述兩階段流程後，使用 PortfolioDecisions 工具輸出結構化結果。"
                 ),
                 MessagesPlaceholder(variable_name="messages"),
@@ -110,13 +169,8 @@ def create_portfolio_manager(llm):
         prompt = prompt.partial(
             strategy=strategy,
             end_date=end_date,
-            macro_analysis=macro_analysis,
-            fin_analysis=fin_analysis,
-            tech_analysis=tech_analysis,
-            news_analysis=news_analysis,
-            fin_verify_selected=fin_verify_selected,
-            tech_verify_selected=tech_verify_selected,
-            news_verify_selected=news_verify_selected,
+            macro_markdown=macro_markdown,
+            reports_markdown=reports_markdown,
         )
         prompt = prompt.partial(tool_names=tool_names)
 

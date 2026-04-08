@@ -15,8 +15,11 @@ from tradingagents.agents.utils.agent_output_formats import (
     NewsOutput,
     Task,
 )
-from tradingagents.agents.utils.agent_utils import get_tools, get_company_news
-from tradingagents.agents.utils.graph_helpers import clear_messages
+from tradingagents.agents.utils.agent_utils import (
+    get_tools,
+    clear_messages,
+    get_company_news,
+)
 from tradingagents.agents.utils.agent_states import NewsState
 
 
@@ -51,8 +54,7 @@ def create_news_analyst(llm):
                     "- 採用事件驅動分析方法，先辨識事件，分類事件，再評估影響，最後輸出投資判斷\n"
                     "- 僅保留對股價有實質影響的資訊，忽略雜訊新聞\n"
                     "- 每個結論必須對應具體新聞事件\n"
-                    "- 若不同新聞產生矛盾訊號，必須明確指出\n"
-                    "{symbol} 的基本資料：\n"
+                    "- 若不同新聞產生矛盾訊號，必須明確指出\n\n"
                     "{company_info}\n\n"
                     "所有工具呼叫的 end_date 參數皆必須設為 {end_date}，為本次資料分析截止日期，"
                     "絕對不得使用超過此日期的任何資料。\n\n"

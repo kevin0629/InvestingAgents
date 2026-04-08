@@ -8,9 +8,9 @@ from langgraph.prebuilt import ToolNode
 from langgraph.graph import StateGraph, START, END
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from tradingagents.agents.utils.agent_states import CriticState
-from tradingagents.agents.utils.graph_helpers import clear_messages
 from tradingagents.agents.utils.agent_utils import (
     get_tools,
+    clear_messages,
     retrieve_reflections,
     store_reflections,
 )

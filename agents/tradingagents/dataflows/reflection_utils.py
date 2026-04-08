@@ -225,7 +225,6 @@ def retrieve_reflections(
                     range_val = value
 
                     must_conditions.append(FieldCondition(key=key, range=DatetimeRange(lt=range_val)))
-                    print(f"Added range filter for 'date' with lt {range_val} (original value: {value})")
                 else:
                     # Simple equality match for other fields
                     must_conditions.append(
@@ -254,7 +253,7 @@ def retrieve_reflections(
         for hit in query_result:
             content += f"- {hit.payload.get('reflection_text', '')} (score: {hit.score:.4f})\n"
         
-        return header + content
+        return header + content if content != "" else "沒有找到相似的經驗反思!"
         
     except Exception as e:
         print(f"Error retrieving from Qdrant: {e}")

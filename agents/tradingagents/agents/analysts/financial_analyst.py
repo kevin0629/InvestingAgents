@@ -16,6 +16,8 @@ from tradingagents.agents.utils.agent_output_formats import (
 )
 from tradingagents.agents.utils.agent_utils import (
     get_tools,
+    clear_messages,
+    handle_image_tool_results,
     get_balance_sheet,
     get_cashflow,
     get_dupont_analysis,
@@ -24,7 +26,6 @@ from tradingagents.agents.utils.agent_utils import (
     get_monthly_revenue,
     get_river_chart,
 )
-from tradingagents.agents.utils.graph_helpers import clear_messages, handle_image_tool_results
 from tradingagents.agents.utils.agent_states import FinancialState
 
 
@@ -62,8 +63,7 @@ def create_financial_analyst(llm):
                     "你的分析必須遵循以下原則：\n"
                     "- 採用 bottom-up 的分析方法，先分析財務數據，再推導公司體質和成長性，最後評估股價表現\n"
                     "- 所有結論必須基於具體財務數據\n"
-                    "- 若數據出現矛盾，必須明確指出\n"
-                    "{symbol} 的基本資料：\n"
+                    "- 若數據出現矛盾，必須明確指出\n\n"
                     "{company_info}\n\n"
                     "你可以使用的工具: {tool_names}\n"
                     "所有工具呼叫的 end_date 參數皆必須設為 {end_date}，為本次資料分析截止日期，嚴禁使用截止日期以後的資料。\n"

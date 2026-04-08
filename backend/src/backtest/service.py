@@ -31,7 +31,7 @@ class BacktestService:
                 "cr_threshold": 100,
                 "eps_threshold": 0,
                 "roe_threshold": 0,
-                "top_n": 2
+                "top_n": 30
             }
         }
     }
