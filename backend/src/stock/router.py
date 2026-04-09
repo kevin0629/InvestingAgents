@@ -51,7 +51,7 @@ async def get_stock_chart(
         raise HTTPException(status_code=500, detail="Internal Server Error")
     
 @router.get("/{company_symbol}/river", responses={200: {"content": {"image/png": {}}}})
-async def get_stock_chart(
+async def get_river_chart(
     company_symbol: str,
     end_date: Optional[str] = None,
 ):

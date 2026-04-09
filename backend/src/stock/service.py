@@ -60,8 +60,6 @@ class StockService:
             )
             
             # 這裡用一個簡單的估算來移動 x_pos，避免文字重疊
-            # 在 transAxes 中，0.1 大約是寬度的 10%。根據字串長度動態調整
-            # 每個字元大約佔 0.008 (這取決於字型大小和圖表寬度，可能需要微調)
             char_width_approx = 0.0045
             x_pos += len(text) * char_width_approx
 
@@ -69,6 +67,8 @@ class StockService:
         """
         Generate stock chart using mplfinance
         """
+        timeframe = (params.timeframe or "D").upper()
+
         # 1. Get raw data (Full History)
         df = get_each_company_daily_price(self.data.raw_price_data, self.company_symbol)
         
@@ -78,6 +78,14 @@ class StockService:
         # Ensure index is Datetime
         df.index = pd.to_datetime(df.index)
         df = df.sort_index()
+
+        # Determine strict end date once and use it consistently.
+        if params.end_date:
+            display_end_ts = pd.to_datetime(params.end_date).normalize()
+        elif self.end_date:
+            display_end_ts = pd.to_datetime(self.end_date).normalize()
+        else:
+            display_end_ts = pd.Timestamp(datetime.now().date())
         
         # Ensure columns are numeric to avoid aggregation errors
         temp_df = df.copy()
@@ -103,7 +111,7 @@ class StockService:
         # Final strict cast to float
         df = temp_df.astype(float)
 
-        if params.timeframe in ["W", "M"]:
+        if timeframe in ["W", "M"]:
             try:
                 agg_logic = {
                     'open': 'first',
@@ -116,7 +124,7 @@ class StockService:
                 active_agg = {k: v for k, v in agg_logic.items() if k in df.columns}
                 
                 # Resample
-                df = df.resample(params.timeframe).agg(active_agg)
+                df = df.resample(timeframe).agg(active_agg)
                 
                 # Filter out empty bins (where Close is NaN)
                 if 'close' in df.columns:
@@ -127,7 +135,6 @@ class StockService:
             except Exception as e:
                 # Add debugging context to the error
                 error_msg = f"Resample failed. Shape: {df.shape}, Dtypes: {df.dtypes.to_dict()}. Error: {str(e)}"
-                print(error_msg) # Print to server logs
                 raise RuntimeError(error_msg)
 
         # Rename columns for mplfinance / calculation
@@ -147,10 +154,6 @@ class StockService:
     
         # Adjust indicator periods based on timeframe and data length
         data_len = len(close)
-        
-        # Safety check: need minimum data for any calculation
-        if data_len < 14:
-            raise ValueError(f"Insufficient data for technical indicators. Only {data_len} bars available, need at least 14.")
         
         try:
             # Panel 0: MAs - Only calculate if enough data
@@ -181,27 +184,44 @@ class StockService:
             
         except Exception as e:
             error_msg = f"TALib calculation failed. Data length: {data_len}, Close dtype: {close.dtype}, Error: {str(e)}"
-            print(f"[ERROR] {error_msg}")
             raise RuntimeError(error_msg)
 
         # 3. Filter Date Range for Display
-        # Determine strict end date
-        if params.end_date:
-            display_end = pd.to_datetime(params.end_date).date()
-        elif self.end_date:
-            display_end = pd.to_datetime(self.end_date).date()
+        # For resampled data, include the bucket that contains end_date (e.g. week/month end label).
+        if timeframe in ["W", "M"]:
+            display_cutoff = display_end_ts.to_period(timeframe).end_time.normalize()
         else:
-            display_end = datetime.now().date()
+            display_cutoff = display_end_ts
 
         # Slice data up to end_date
         # We also need a start point. If not provided, show last N bars (e.g. 240)
-        df_display = df[df.index.date <= display_end]
+        df_display = df[df.index <= display_cutoff]
         
         if len(df_display) > 240:
             df_display = df_display.iloc[-240:]
 
-        if len(df_display) < 2:
+        if len(df_display) == 0:
             raise ValueError("Not enough data to plot chart for the selected range")
+
+        # mplfinance may render a distorted candle/volume bar when only one bar is present.
+        # Add one empty period on each side so the real bar has visible horizontal context.
+        plot_df = df_display
+        if len(df_display) == 1:
+            single_date = df_display.index[0]
+            if timeframe == "W":
+                pad_offset = pd.offsets.Week(1)
+            elif timeframe == "M":
+                pad_offset = pd.offsets.MonthEnd(1)
+            else:
+                pad_offset = pd.offsets.BDay(1)
+
+            padding_index = pd.DatetimeIndex([single_date - pad_offset, single_date + pad_offset])
+            padding_index = padding_index[padding_index != single_date].drop_duplicates()
+            if len(padding_index) == 0:
+                padding_index = pd.DatetimeIndex([single_date - pd.Timedelta(days=1), single_date + pd.Timedelta(days=1)])
+
+            padding_df = pd.DataFrame(index=padding_index, columns=df_display.columns, dtype=float)
+            plot_df = pd.concat([df_display, padding_df]).sort_index()
 
         # 4. Construct AddPlots
         apds = []
@@ -214,43 +234,43 @@ class StockService:
         idx_macd = current_idx + 1
         idx_rsi = current_idx + 2
 
-        # -- Panel 0: Main Chart Indicators --
-        # Verify BB data integrity
-        # bb_valid = df_display[['BB_Upper', 'BB_Lower']].notna().all(axis=1)
-        # if bb_valid.any():
-        #     bb_check = df_display.loc[bb_valid, 'BB_Upper'] >= df_display.loc[bb_valid, 'BB_Lower']
-        #     if not bb_check.all():
-        #         print(f"[WARNING] Bollinger Bands validation failed! Some Upper < Lower")
-        #         print(f"[WARNING] Sample data: {df_display[['BB_Upper', 'BB_Lower']].tail()}")
+        macd_series = plot_df['MACD'] if 'MACD' in plot_df.columns else pd.Series(np.nan, index=plot_df.index)
+        macd_signal_series = plot_df['MACD_Signal'] if 'MACD_Signal' in plot_df.columns else pd.Series(np.nan, index=plot_df.index)
+        macd_hist_series = plot_df['MACD_Hist'] if 'MACD_Hist' in plot_df.columns else pd.Series(np.nan, index=plot_df.index)
+        rsi_series = plot_df['RSI'] if 'RSI' in plot_df.columns else pd.Series(np.nan, index=plot_df.index)
         
         # MAs (explicitly set secondary_y=False to use primary y-axis) - Only plot if exists
-        if 'MA20' in df_display.columns:
-            apds.append(mpf.make_addplot(df_display['MA20'], panel=idx_main, color=self.colors['MA20'], width=1.0, secondary_y=False))
-        if 'MA60' in df_display.columns:
-            apds.append(mpf.make_addplot(df_display['MA60'], panel=idx_main, color=self.colors['MA60'], width=1.0, secondary_y=False))
-        if 'MA240' in df_display.columns:
-            apds.append(mpf.make_addplot(df_display['MA240'], panel=idx_main, color=self.colors['MA240'], width=1.0, secondary_y=False))
+        if 'MA20' in plot_df.columns:
+            apds.append(mpf.make_addplot(plot_df['MA20'], panel=idx_main, color=self.colors['MA20'], width=1.0, secondary_y=False))
+        if 'MA60' in plot_df.columns:
+            apds.append(mpf.make_addplot(plot_df['MA60'], panel=idx_main, color=self.colors['MA60'], width=1.0, secondary_y=False))
+        if 'MA240' in plot_df.columns:
+            apds.append(mpf.make_addplot(plot_df['MA240'], panel=idx_main, color=self.colors['MA240'], width=1.0, secondary_y=False))
         
         # BBands (畫在主圖，因為需要跟 K 線對照) - Only plot if exists
         # 使用 linestyle='--' 區隔 BB 和 MA，並加上填充色
-        if 'BB_Upper' in df_display.columns and 'BB_Lower' in df_display.columns:
-            apds.append(mpf.make_addplot(df_display['BB_Upper'], panel=idx_main, color=self.colors['BB_Upper'], alpha=0.5, width=0.8, linestyle='--', secondary_y=False))
-            apds.append(mpf.make_addplot(df_display['BB_Lower'], panel=idx_main, color=self.colors['BB_Lower'], alpha=0.5, width=0.8, linestyle='--', secondary_y=False))
+        if 'BB_Upper' in plot_df.columns and 'BB_Lower' in plot_df.columns:
+            apds.append(mpf.make_addplot(plot_df['BB_Upper'], panel=idx_main, color=self.colors['BB_Upper'], alpha=0.5, width=0.8, linestyle='--', secondary_y=False))
+            apds.append(mpf.make_addplot(plot_df['BB_Lower'], panel=idx_main, color=self.colors['BB_Lower'], alpha=0.5, width=0.8, linestyle='--', secondary_y=False))
         # 這裡我們可以選擇是否畫中軌，因為中軌其實就是 MA20，避免重複可以不畫，或是畫細一點
 
-        # -- Panel: MACD -- Only plot if exists
-        if 'MACD' in df_display.columns:
-            apds.append(mpf.make_addplot(df_display['MACD'], panel=idx_macd, color=self.colors['MACD'], width=1.0, ylabel='MACD', secondary_y=False))
-            apds.append(mpf.make_addplot(df_display['MACD_Signal'], panel=idx_macd, color=self.colors['Signal'], width=1.0, secondary_y=False))
-            # MACD 柱狀圖：根據正負給顏色
-            macd_hist_colors = [self.colors['MACD_Hist_Positive'] if v >= 0 else self.colors['MACD_Hist_Negative'] for v in df_display['MACD_Hist']]
-            apds.append(mpf.make_addplot(df_display['MACD_Hist'], type='bar', panel=idx_macd, color=macd_hist_colors, alpha=0.5, secondary_y=False))
+        # -- Panel: MACD -- Always render panel, even if indicator values are all NaN.
+        apds.append(mpf.make_addplot(macd_series, panel=idx_macd, color=self.colors['MACD'], width=1.0, ylabel='MACD', secondary_y=False))
+        apds.append(mpf.make_addplot(macd_signal_series, panel=idx_macd, color=self.colors['Signal'], width=1.0, secondary_y=False))
+        apds.append(mpf.make_addplot(pd.Series(0.0, index=plot_df.index), panel=idx_macd, color='gray', width=0.8, alpha=0.6, secondary_y=False))
+        macd_hist_colors = [
+            self.colors['MACD_Hist_Positive'] if pd.notna(v) and v >= 0
+            else self.colors['MACD_Hist_Negative'] if pd.notna(v)
+            else 'gray'
+            for v in macd_hist_series
+        ]
+        apds.append(mpf.make_addplot(macd_hist_series, type='bar', panel=idx_macd, color=macd_hist_colors, alpha=0.5, secondary_y=False))
 
-        # -- Panel: RSI -- Only plot if exists
-        if 'RSI' in df_display.columns:
-            apds.append(mpf.make_addplot(df_display['RSI'], panel=idx_rsi, color=self.colors['RSI'], width=1.0, ylabel='RSI', secondary_y=False))
-            apds.append(mpf.make_addplot(pd.Series(70, index=df_display.index), panel=idx_rsi, color=self.colors['RSI_Overbought'], width=0.8, linestyle='--', secondary_y=False))
-            apds.append(mpf.make_addplot(pd.Series(30, index=df_display.index), panel=idx_rsi, color=self.colors['RSI_Oversold'], width=0.8, linestyle='--', secondary_y=False))
+        # -- Panel: RSI -- Always render panel, even if indicator values are all NaN.
+        apds.append(mpf.make_addplot(rsi_series, panel=idx_rsi, color=self.colors['RSI'], width=1.0, ylabel='RSI', secondary_y=False))
+        apds.append(mpf.make_addplot(pd.Series(70, index=plot_df.index), panel=idx_rsi, color=self.colors['RSI_Overbought'], width=0.8, linestyle='--', secondary_y=False))
+        apds.append(mpf.make_addplot(pd.Series(50, index=plot_df.index), panel=idx_rsi, color='gray', width=0.7, linestyle=':', alpha=0.7, secondary_y=False))
+        apds.append(mpf.make_addplot(pd.Series(30, index=plot_df.index), panel=idx_rsi, color=self.colors['RSI_Oversold'], width=0.8, linestyle='--', secondary_y=False))
 
         # 5. Visual Configuration
         
@@ -282,9 +302,14 @@ class StockService:
         buf = io.BytesIO()
         
         try:
+            if timeframe == "M":
+                datetime_format = '%Y-%m'
+            else:
+                datetime_format = '%Y-%m-%d'
+
             # Plotting
             fig, axes = mpf.plot(
-                df_display,
+                plot_df,
                 type='candle',
                 style=my_style,
                 addplot=apds,
@@ -295,8 +320,18 @@ class StockService:
                 figsize=fig_size,
                 returnfig=True,
                 tight_layout=True,
-                scale_padding={'left': 0.5, 'top': 3, 'right': 1.5, 'bottom': 0.5} # 留白給標籤
+                scale_padding={'left': 0.5, 'top': 3, 'right': 1.5, 'bottom': 0.5}, # 留白給標籤
+                datetime_format=datetime_format,
+                xrotation=15,
             )
+
+            # Single-bar charts can produce duplicate auto tick labels; force deterministic labels.
+            if len(df_display) == 1:
+                tick_positions = np.arange(len(plot_df))
+                tick_labels = [d.strftime(datetime_format) for d in plot_df.index]
+                bottom_ax = axes[idx_rsi * 2]
+                bottom_ax.set_xticks(tick_positions)
+                bottom_ax.set_xticklabels(tick_labels, rotation=15, ha='right')
 
             # -- 準備 Panel 0 (主圖) 的標籤資料 --
             # 取最後一筆非 NaN 的值
@@ -320,7 +355,7 @@ class StockService:
                 self.add_header_labels(axes[0], main_labels)
             
             # -- 準備 Panel (MACD) 的標籤資料 --
-            if 'MACD' in df_display.columns:
+            if 'MACD' in df_display.columns and df_display['MACD'].notna().any():
                 macd_ax = axes[idx_macd * 2]
                 macd_labels = []
                 if not pd.isna(df_display['MACD'].iloc[last_idx]):
@@ -331,7 +366,7 @@ class StockService:
                     self.add_header_labels(macd_ax, macd_labels)
 
             # -- 準備 Panel (RSI) 的標籤資料 --
-            if 'RSI' in df_display.columns:
+            if 'RSI' in df_display.columns and df_display['RSI'].notna().any():
                 rsi_ax = axes[idx_rsi * 2]
                 rsi_labels = []
                 if not pd.isna(df_display['RSI'].iloc[last_idx]):
@@ -389,7 +424,6 @@ class StockService:
             except Exception as e:
                 # Add debugging context to the error
                 error_msg = f"Resample failed. Shape: {df.shape}, Dtypes: {df.dtypes.to_dict()}. Error: {str(e)}"
-                print(error_msg) # Print to server logs
                 raise RuntimeError(error_msg)
 
         # Rename columns for mplfinance / calculation
@@ -428,9 +462,6 @@ class StockService:
         
         if len(df_display) > 240:
             df_display = df_display.iloc[-240:]
-
-        if len(df_display) < 2:
-            raise ValueError("Not enough data to plot chart for the selected range")
 
         # 4. Construct AddPlots
         apds = []
@@ -533,7 +564,8 @@ class StockService:
         start_date_dt = end_date_dt - pd.DateOffset(years=10)  # Show last 10 years only
         close = close[(close.index <= end_date_dt) & (close.index >= start_date_dt)]
 
-        # Build trailing-4-quarter EPS (TTM) from report events, aligned by release_date
+        # Build trailing-4-quarter EPS (TTM) from report events.
+        # Compute rolling TTM on fiscal quarter sequence, then map each TTM to its release_date.
         report_eps_dict = self.data.format_report_data("EPS")
         if not report_eps_dict or "EPS" not in report_eps_dict:
             raise ValueError("No EPS report data available")
@@ -544,23 +576,36 @@ class StockService:
 
         # eps_events is indexed by (date, release_date)
         eps_events = eps_events_df[self.company_symbol].dropna().rename("eps").reset_index()
-        if not {"release_date", "eps"}.issubset(set(eps_events.columns)):
+        if not {"date", "release_date", "eps"}.issubset(set(eps_events.columns)):
             raise ValueError("Unexpected EPS report data format")
 
+        eps_events["date"] = pd.to_datetime(eps_events["date"])
         eps_events["release_date"] = pd.to_datetime(eps_events["release_date"])
-        if "date" in eps_events.columns:
-            eps_events["date"] = pd.to_datetime(eps_events["date"])
 
-        # Keep a bit of history before start_date to allow computing TTM inside the 10Y window
-        eps_events = eps_events[(eps_events["release_date"] <= end_date_dt) & (eps_events["release_date"] >= (start_date_dt - pd.DateOffset(years=2)))]
+        # Keep enough quarter history to compute rolling TTM for the visible window.
+        eps_events = eps_events[
+            (eps_events["release_date"] <= end_date_dt) &
+            (eps_events["date"] >= (start_date_dt - pd.DateOffset(years=2)))
+        ]
 
-        # If multiple rows share the same release_date, take the last one
-        sort_cols = [c for c in ["release_date", "date"] if c in eps_events.columns]
-        eps_events = eps_events.sort_values(by=sort_cols)
-        eps_by_release = eps_events.groupby("release_date")["eps"].last().sort_index()
+        # Dedupe by fiscal quarter first, then compute TTM in fiscal order.
+        eps_quarterly = (
+            eps_events
+            .sort_values(by=["date", "release_date"])
+            .groupby("date", as_index=False)
+            .agg({"eps": "last", "release_date": "last"})
+            .sort_values(by="date")
+        )
+        eps_quarterly["eps_ttm"] = eps_quarterly["eps"].rolling(window=4, min_periods=4).sum()
 
-        # TTM EPS = sum of the latest 4 reported quarters available at each release date
-        eps_ttm_by_release = eps_by_release.rolling(window=4, min_periods=4).sum()
+        # Use release_date as the first date when each TTM value is knowable.
+        eps_ttm_by_release = (
+            eps_quarterly.dropna(subset=["eps_ttm"])
+            .sort_values(by=["release_date", "date"])
+            .groupby("release_date")["eps_ttm"]
+            .last()
+            .sort_index()
+        )
 
         # Align to close trading calendar using only available information up to that date
         eps_ttm_daily = eps_ttm_by_release.reindex(close.index, method="ffill")
@@ -573,9 +618,6 @@ class StockService:
         data_full = pd.DataFrame({'close': close, 'eps': eps_ttm})
         data_full = data_full.dropna(subset=['close'])
 
-        if len(data_full) < 10:
-            raise ValueError("Insufficient data for PE river chart (need at least 10 months)")
-
         # Compute PE only when EPS_TTM > 0; otherwise keep NaN so river is not drawn
         valid_mask = data_full['eps'].notna() & (data_full['eps'] > 0) & data_full['close'].notna()
         data_full['pe'] = np.nan
@@ -584,7 +626,7 @@ class StockService:
 
         # Determine whether we have enough valid months to draw river bands
         valid_pe = data_full['pe'].dropna()
-        has_river = len(valid_pe) >= 10
+        has_river = len(valid_pe) >= 2
         
         pe_lines = None
         if has_river:

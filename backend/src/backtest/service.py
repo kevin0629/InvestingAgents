@@ -23,7 +23,7 @@ class BacktestService:
     AVAILABLE_STRATEGIES = {
         "monthly_revenue_growth_roe": {
             "name": "monthly_revenue_growth_roe",
-            "description": "穩健營收動能策略: 篩選營收成長>24%、負債比<70%、自由現金流>0、流動比率>100%、EPS>0、ROE>0%的股票，並選取ROE最高的2檔",
+            "description": "穩健營收動能策略: 篩選營收成長>24%、負債比<70%、自由現金流>0、流動比率>100%、EPS>0、ROE>0%的股票，並選取ROE最高的30檔",
             "parameters": {
                 "mryoy_threshold": 24,
                 "dbr_threshold": 70,
@@ -145,6 +145,7 @@ class BacktestService:
         dbr = self.data.get("report:dbr")
         fcf = self.data.get("report:fcf")
         cr = self.data.get("report:cr")
+        close = self.data.get("price:close")
         
         # 濾網 1: 基本獲利能力與安全性
         basic_filter = (
@@ -157,12 +158,17 @@ class BacktestService:
         
         # 濾網 2: 營收成長優質區間
         mryoy_filter = (mryoy > mryoy_threshold)
+
+        # 濾網 3: 確保有價格資料(避免有些會有財報但沒股價的情況)
+        price_filter = close.notna()
         
         # 組合條件
-        final_condition = basic_filter & mryoy_filter
+        final_condition = basic_filter & mryoy_filter & price_filter
         
         # 選股: 在符合條件的股票中，選 ROE 最高的 top_n 檔
         strategy_signal = roe[final_condition].is_largest(top_n)
+
+        strategy_signal.index = pd.to_datetime(strategy_signal.index)
 
         # start_date 處理
         if start_date:

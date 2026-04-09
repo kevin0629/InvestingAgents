@@ -235,7 +235,7 @@ class Data:
 
             for key in adjusted_fundamental_data:
                 adjusted_fundamental_data[key].fillna(method="ffill", inplace=True)
-                adjusted_fundamental_data[key] = adjusted_fundamental_data[key].resample("B").ffill()
+                adjusted_fundamental_data[key] = adjusted_fundamental_data[key].reindex(self.all_price_dict["close"].index).ffill()
             
             if len(adjusted_fundamental_data) == 1:
                 return next(iter(adjusted_fundamental_data.values()))
@@ -251,7 +251,7 @@ class Data:
 
             for key in adjusted_report_data:
                 adjusted_report_data[key].fillna(method="ffill", inplace=True)
-                adjusted_report_data[key] = adjusted_report_data[key].resample("B").ffill()
+                adjusted_report_data[key] = adjusted_report_data[key].reindex(self.all_price_dict["close"].index).ffill()
 
             # return report_data
             if len(adjusted_report_data) == 1:

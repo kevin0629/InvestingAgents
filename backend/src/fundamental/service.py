@@ -2,6 +2,7 @@ from typing import List, Optional
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from collections import defaultdict
+import math
 import pandas as pd
 from dateutil.relativedelta import relativedelta
 from src.format_data import get_each_company_fundamental, get_each_company_report
@@ -10,6 +11,20 @@ from src.format_data import get_each_company_fundamental, get_each_company_repor
 class IndicatorService:
     def __init__(self, data_instance):
         self.data = data_instance
+
+    def _normalize_indicator_value(self, value):
+        """Convert NaN/Inf-like values into None for JSON-safe response payloads."""
+        if pd.isna(value):
+            return None
+
+        if isinstance(value, (int, float)):
+            try:
+                if not math.isfinite(float(value)):
+                    return None
+            except (TypeError, ValueError):
+                return None
+
+        return value
 
     def _normalize_end_date(self, end_date):
         if end_date is None:
@@ -135,6 +150,7 @@ class IndicatorService:
             date = row.Index
             factor_name = getattr(row, "indicator_name", None)
             factor_value = getattr(row, "indicator_value", None)
+            factor_value = self._normalize_indicator_value(factor_value)
 
             if period == "month":
                 period_key = date.strftime("%Y/%m")
