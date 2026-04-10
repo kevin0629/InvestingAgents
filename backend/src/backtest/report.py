@@ -477,7 +477,7 @@ class Report():
 
         return stats
 
-    def display_reutrn_treemap(self):
+    def display_return_treemap(self):
         df = self.trades.copy()
         df["cum_return"] =  (1 + df['return']).groupby(df['stock_id']).cumprod() - 1
         df = df.groupby('stock_id').last()
