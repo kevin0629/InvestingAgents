@@ -39,7 +39,7 @@ class BacktestReportResponse(BaseModel):
     strategy_name: str = Field(..., description="策略名稱")
     strategy_description: str = Field(..., description="策略描述")
     performance: PerformanceMetrics = Field(..., description="績效指標")
-    previous_period_return: float = Field(..., description="上一期加權報酬率")
+    previous_period_return: str = Field(..., description="上一期加權報酬率")
     current_holdings: List[HoldingInfo] = Field(..., description="當前持股列表")
     message: Optional[str] = Field(None, description="附加訊息")
 
@@ -61,6 +61,6 @@ class MarketReturnResponse(BaseModel):
     exit_trade_date: str = Field(..., description="出場實際交易日(訊號日後第一個交易日)")
     entry_price: float = Field(..., description="進場價格")
     exit_price: float = Field(..., description="出場價格")
-    market_return: float = Field(..., description="大盤報酬率")
+    market_return: str = Field(..., description="大盤報酬率")
     message: Optional[str] = Field(None, description="附加訊息")
 

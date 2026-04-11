@@ -157,6 +157,39 @@ def _normalize_date_value(raw_value: Any, fallback: str) -> str:
     return fallback
 
 
+def _extract_performance_return(dataframe: Any) -> str:
+    if not isinstance(dataframe, pd.DataFrame) or dataframe.empty:
+        return "0.0000%"
+
+    if "position" not in dataframe.columns or "return" not in dataframe.columns:
+        return "0.0000%"
+
+    def _to_ratio(value: Any) -> float:
+        if value is None:
+            return 0.0
+
+        text = str(value).strip()
+        if not text:
+            return 0.0
+
+        is_percent = text.endswith("%")
+        if is_percent:
+            text = text[:-1].strip()
+
+        try:
+            numeric_value = float(text)
+        except (TypeError, ValueError):
+            return 0.0
+
+        return numeric_value / 100.0 if is_percent else numeric_value
+
+    position_series = pd.to_numeric(dataframe["position"], errors="coerce").fillna(0.0)
+    return_series = dataframe["return"].apply(_to_ratio)
+    weighted_return = float((position_series * return_series).sum())
+
+    return f"{weighted_return * 100:.4f}%"
+
+
 def _modes_by_reflection(reflection: bool) -> List[str]:
     if reflection:
         return ["equal_weight", "custom_weight"]
@@ -406,7 +439,7 @@ def get_stock_account(strategy: str, end_date: str) -> Dict[str, Any]:
             "file_path": "",
             "start_sig_date": str(update_result.get("signal_date") or ""),
             "performance": update_result.get("performance", {}),
-            "performance_return": str((update_result.get("performance") or {}).get("return") or ""),
+            "performance_return": _extract_performance_return(pd.DataFrame(columns=HOLDING_HEADERS)),
             "dataframe": pd.DataFrame(columns=HOLDING_HEADERS),
             "rows": [],
             "row_count": 0,
@@ -421,7 +454,7 @@ def get_stock_account(strategy: str, end_date: str) -> Dict[str, Any]:
         "file_path": holding_path,
         "start_sig_date": str(update_result.get("signal_date") or ""),
         "performance": update_result.get("performance", {}),
-        "performance_return": str((update_result.get("performance") or {}).get("return") or ""),
+        "performance_return": _extract_performance_return(dataframe),
         "dataframe": dataframe,
         "rows": rows,
         "row_count": len(rows),
@@ -651,10 +684,10 @@ if __name__ == "__main__":
     )
     signal_date = "2025-03-03"
 
-    # create_result = create_stock_holding(strategy=strategy, orders=orders, signal_date=signal_date, reflection=False)
+    create_result = create_stock_holding(strategy=strategy, orders=orders, signal_date=signal_date, reflection=False)
     # print(create_result)
-    # create_result = create_stock_holding(strategy=strategy, orders=orders, signal_date=signal_date, reflection=True)
+    create_result = create_stock_holding(strategy=strategy, orders=orders, signal_date=signal_date, reflection=True)
     # print(create_result)
 
-    update_result = update_stock_holding(strategy=strategy, end_date="2025-04-10")
+    update_result = get_stock_account(strategy=strategy, end_date="2025-04-10")
     print(update_result)

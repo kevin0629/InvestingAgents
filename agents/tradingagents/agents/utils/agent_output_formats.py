@@ -5,24 +5,11 @@ class Task(BaseModel):
     symbol: str = Field(description="The stock symbol related to this task, must be integer string like '2330', '2455', '3491'")
     task_type: Literal["ANALYSIS", "VERIFICATION", "HYBRID"] = Field(None, description="Type of task")
     # task: str = Field(description="Detailed description of the task")
+    position: Optional[float] = Field(None, description="The target position size for the given stock symbol in previous period.")
+    stock_return: Optional[str] = Field(None, description="The stock return for the previous period, used for VERIFICATION and HYBRID tasks to reflect on the accuracy of the previous recommendation")
     buy_reason: Optional[str] = Field(None, description="The reason for recommending a buy action, if task_type is VERIFICATION else None")
     selected: bool = Field(False, description="Whether this symbol is selected in both previous and current period")
     company_info: Optional[str] = Field(None, description="Company basic information")
-
-class CoordinatorOutput(BaseModel):
-    """Respond to the user with this"""
-    user_query: str = Field(description="The original user query that initiated the analysis and trading process")
-    mode: Literal["query", "strategy"] = Field(description="Operation mode: query or strategy")
-    market_situation: str = Field(description="Summary of the current market situation.")
-    end_date: Optional[str] = Field(None, description="The end date for the data retrieval, analysis and trading decision.")
-    
-    strategy: Optional[str] = Field(None, description="The investment strategy to follow, e.g. monthly_revenue_growth_roe.")
-
-    technical_tasks: List[Task] = Field(None, description="The coordinator's detailed plan for technical analysis.")
-    financial_tasks: List[Task] = Field(None, description="The coordinator's detailed plan for financial analysis.")
-    news_tasks: List[Task] = Field(None, description="The coordinator's detailed plan for news analysis.")
-
-
 
 class FinancialAnalysisReport(BaseModel):
     symbol: str = Field(description="The stock symbol related to this financial analysis report")

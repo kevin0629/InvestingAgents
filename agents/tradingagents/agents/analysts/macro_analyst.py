@@ -24,7 +24,7 @@ def create_macro_analyst(llm):
     """回傳 Macro Analyst 的 compiled subgraph。"""
     tools = [
         get_taiex_data,
-        # get_macro_news,
+        get_macro_news,
         MacroAnalysisReport,
     ]
     tool_names = get_tools(tools)

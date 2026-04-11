@@ -20,15 +20,30 @@ def _extract_return_value(payload: Any) -> str:
     if not isinstance(payload, dict):
         return ""
 
-    performance = payload.get("performance")
-    if isinstance(performance, dict):
-        value = performance.get("return")
+    for key in ("performance_return", "previous_period_return", "market_return", "return"):
+        value = payload.get(key)
         if value is not None and str(value).strip() != "":
             return str(value)
 
-    value = payload.get("return")
-    if value is not None and str(value).strip() != "":
-        return str(value)
+    performance = payload.get("performance")
+    if isinstance(performance, dict):
+        for key in (
+            "return",
+            "period_return",
+            "previous_period_return",
+            "total_return",
+            "market_return",
+            "annualized_rate_of_return",
+        ):
+            value = performance.get(key)
+            if value is None:
+                continue
+            text = str(value).strip()
+            if not text:
+                continue
+            if key == "annualized_rate_of_return" and not text.endswith("%"):
+                return f"{text}%"
+            return text
 
     return ""
 
@@ -51,6 +66,9 @@ def _extract_previous_holdings(account_payload: Dict[str, Any]) -> Dict[str, Any
     rows = account_payload.get("rows") or []
     prev_symbols: List[str] = []
     prev_buy_reason_map: Dict[str, str] = {}
+    prev_position_map: Dict[str, float] = {}
+    prev_return_map: Dict[str, str] = {}
+    prev_holdings_context: List[Dict[str, Any]] = []
     seen = set()
 
     for row in rows:
@@ -62,9 +80,32 @@ def _extract_previous_holdings(account_payload: Dict[str, Any]) -> Dict[str, Any
         prev_symbols.append(symbol)
         prev_buy_reason_map[symbol] = str((row or {}).get("buy_reason") or "").strip()
 
+        raw_position = (row or {}).get("position")
+        try:
+            prev_position_map[symbol] = float(raw_position)
+        except (TypeError, ValueError):
+            pass
+
+        stock_return = (row or {}).get("return") or None
+        if stock_return:
+            stock_return = str(round(stock_return * 100, 4))
+            prev_return_map[symbol] = stock_return
+
+        prev_holdings_context.append(
+            {
+                "symbol": symbol,
+                "position": prev_position_map.get(symbol),
+                "stock_return": stock_return,
+                "buy_reason": prev_buy_reason_map.get(symbol, ""),
+            }
+        )
+
     return {
         "symbols": prev_symbols,
         "buy_reason_map": prev_buy_reason_map,
+        "position_map": prev_position_map,
+        "stock_return_map": prev_return_map,
+        "previous_holdings_context": prev_holdings_context,
         "start_sig_date": str(account_payload.get("start_sig_date") or "").strip(),
         "performance_return": str(account_payload.get("performance_return") or "").strip(),
     }
@@ -179,6 +220,9 @@ def create_distributor():
 
         previous_symbols: List[str] = []
         previous_buy_reason_map: Dict[str, str] = {}
+        previous_position_map: Dict[str, float] = {}
+        previous_stock_return_map: Dict[str, str] = {}
+        previous_holdings_context: List[Dict[str, Any]] = []
         start_sig_date = ""
 
         if strategy_ok and end_date:
@@ -186,8 +230,11 @@ def create_distributor():
             previous_info = _extract_previous_holdings(previous_account)
             previous_symbols = previous_info["symbols"]
             previous_buy_reason_map = previous_info["buy_reason_map"]
+            previous_position_map = previous_info["position_map"]
+            previous_stock_return_map = previous_info["stock_return_map"]
+            previous_holdings_context = previous_info["previous_holdings_context"]
             start_sig_date = previous_info["start_sig_date"]
-            pre_performance = previous_info["performance_return"]
+            pre_performance = _extract_return_value(previous_account) or previous_info["performance_return"]
 
         backtest_report: Dict[str, Any] = {}
         market_return_report: Dict[str, Any] = {}
@@ -209,7 +256,7 @@ def create_distributor():
         if market_return_report:
             pre_market_performance = _extract_return_value(market_return_report)
 
-        if backtest_report and start_sig_date:
+        if backtest_report:
             pre_strategy_performance = _extract_return_value(backtest_report)
 
         symbols = _extract_symbols(backtest_report)
@@ -238,6 +285,9 @@ def create_distributor():
             "pre_market_performance": pre_market_performance,
             "pre_strategy_performance": pre_strategy_performance,
             "pre_performance": pre_performance,
+            "previous_position_map": previous_position_map,
+            "previous_stock_return_map": previous_stock_return_map,
+            "previous_holdings_context": previous_holdings_context,
             # Additional context for downstream agents / logging
             "strategy_description": strategy_description,
             "company_info_map": company_profiles,

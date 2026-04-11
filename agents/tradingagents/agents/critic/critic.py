@@ -28,18 +28,90 @@ def create_critic(llm):
 
     tool_names = get_tools(tools)
 
+    def _report_to_markdown(report):
+        if report is None:
+            return ""
+
+        if hasattr(report, "model_dump"):
+            report = report.model_dump()
+        elif hasattr(report, "dict"):
+            report = report.dict()
+
+        if isinstance(report, dict):
+            symbol = report.get("symbol")
+            signal = report.get("signal")
+            confidence = report.get("confidence_score")
+            selected = report.get("selected")
+            buy_reason = report.get("buy_reason")
+            review_comment = report.get("review_comment")
+            report_text = report.get("report")
+
+            lines = []
+            if symbol:
+                lines.append(f"- 標的: {symbol}")
+            if signal:
+                lines.append(f"- 訊號: {signal}")
+            if confidence is not None:
+                lines.append(f"- 信心分數: {confidence}")
+            if selected is not None:
+                lines.append(f"- 是否為前後期共同入選: {selected}")
+            if buy_reason:
+                lines.append(f"- 原始買進理由: {buy_reason}")
+            if review_comment:
+                lines.append(f"- 檢討意見: {review_comment}")
+            if report_text:
+                lines.append("- 報告內容:")
+                lines.append(f"  {report_text}")
+
+            return "\n".join(lines) if lines else str(report)
+
+        return str(report)
+
+    def _reports_to_markdown(title, reports):
+        rows = reports or []
+        if not rows:
+            return f"### {title}\n- 無資料"
+
+        chunks = [f"### {title}"]
+        for index, row in enumerate(rows, start=1):
+            chunks.append(f"#### {title} #{index}")
+            chunks.append(_report_to_markdown(row))
+        return "\n\n".join(chunks)
+
+    def _build_previous_holdings_summary(previous_holdings_context):
+        rows = previous_holdings_context or []
+        if not rows:
+            return "- 無上一期持股資料"
+
+        lines = []
+        for row in rows:
+            symbol = str((row or {}).get("symbol") or "").strip()
+            if not symbol:
+                continue
+            position = (row or {}).get("position")
+            stock_return = str((row or {}).get("stock_return") or "").strip()
+            buy_reason = str((row or {}).get("buy_reason") or "").strip()
+            lines.append(
+                f"- {symbol}: position={position if position is not None else 'N/A'}, "
+                f"return={round(float(stock_return) * 100, 4) if stock_return else 'N/A'}%, buy_reason={buy_reason or 'N/A'}"
+            )
+
+        return "\n".join(lines) if lines else "- 無上一期持股資料"
+
     def critic_node(state: CriticState):
         end_date = state.get("end_date")
         strategy = state.get("strategy")
         pre_market_performance = state.get("pre_market_performance")
         pre_strategy_performance = state.get("pre_strategy_performance")
         pre_performance = state.get("pre_performance")
+        previous_holdings_summary = _build_previous_holdings_summary(state.get("previous_holdings_context"))
 
-        reports_summary = (
-            f"財務驗證報告:\n{state.get('financial_verification_reports')}\n\n"
-            f"技術驗證報告:\n{state.get('technical_verification_reports')}\n\n"
-            f"新聞驗證報告:\n{state.get('news_verification_reports')}\n\n"
-            f"宏觀報告:\n{state.get('macro_verification_reports')}\n\n"
+        reports_summary = "\n\n".join(
+            [
+                _reports_to_markdown("財務驗證報告", state.get("financial_verification_reports")),
+                _reports_to_markdown("技術驗證報告", state.get("technical_verification_reports")),
+                _reports_to_markdown("新聞驗證報告", state.get("news_verification_reports")),
+            ]
         )
 
         prompt = ChatPromptTemplate.from_messages(
@@ -60,9 +132,11 @@ def create_critic(llm):
                     "上一期大盤表現: {pre_market_performance}\n"
                     "上一期 {strategy} 策略表現: {pre_strategy_performance}\n"
                     "上一期投資決策表現: {pre_performance}\n"
+                    "上一期持股（供報酬歸因參考）:\n{previous_holdings_summary}\n"
                     "Financial 、Technical、News Analyst 提供的驗證報告:\n"
                     "{reports_summary}\n"
-                    "你可以使用的工具: {tool_names}\n, 在使用`store_reflections`之前務必使用`retrieve_reflections`回顧之前的檢討內容，避免重複內容存入。\n\n"
+                    "你可以使用的工具: {tool_names}\n, 在使用`store_reflections`之前務必使用`retrieve_reflections`回顧之前的檢討內容，避免重複內容存入。"
+                    "`store_reflections`只能依據 Financial 、Technical、News Analyst 提供的驗證報告才產生反思，不可以將你的胡思亂想內容胡亂存入，務必確保反思內容是有根據的、具體的、且能夠提煉出可執行的投資原則的。\n"
                     "所有工具呼叫的 end_date 參數皆必須設為 {end_date}，為本次資料分析截止日期，嚴禁使用截止日期以後的資料。\n\n"
                     "分析方法:\n"
                     "Step1: 事實核對\n"
@@ -90,6 +164,7 @@ def create_critic(llm):
             pre_market_performance=pre_market_performance,
             pre_strategy_performance=pre_strategy_performance,
             pre_performance=pre_performance,
+            previous_holdings_summary=previous_holdings_summary,
             strategy=strategy,
             end_date=end_date,
         )

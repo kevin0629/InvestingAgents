@@ -15,6 +15,9 @@ class DistributorState(MessagesState):
     pre_market_performance: str
     pre_strategy_performance: str
     pre_performance: str
+    previous_position_map: Dict[str, float]
+    previous_stock_return_map: Dict[str, str]
+    previous_holdings_context: List[Dict[str, Any]]
     financial_tasks: Annotated[List[Task], operator.add]
     technical_tasks: Annotated[List[Task], operator.add]
     news_tasks: Annotated[List[Task], operator.add]
@@ -46,6 +49,9 @@ class MacroState(MessagesState):
 class CriticState(MessagesState):
     strategy: str
     end_date: str
+    previous_position_map: Dict[str, float]
+    previous_stock_return_map: Dict[str, str]
+    previous_holdings_context: List[Dict[str, Any]]
     financial_verification_reports: List[FinancialVerificationReport]
     technical_verification_reports: List[TechnicalVerificationReport]
     news_verification_reports: List[NewsVerificationReport]
@@ -73,6 +79,9 @@ class AgentState(MessagesState):
     pre_market_performance: Annotated[str, _last_value]
     pre_strategy_performance: Annotated[str, _last_value]
     pre_performance: Annotated[str, _last_value]
+    previous_position_map: Annotated[Dict[str, float], _last_value]
+    previous_stock_return_map: Annotated[Dict[str, str], _last_value]
+    previous_holdings_context: Annotated[List[Dict[str, Any]], _last_value]
 
     technical_tasks: Annotated[List[Task], operator.add]
     financial_tasks: Annotated[List[Task], operator.add]

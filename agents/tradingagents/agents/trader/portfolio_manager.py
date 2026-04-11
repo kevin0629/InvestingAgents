@@ -80,12 +80,63 @@ def _report_to_markdown(report):
     return str(report)
 
 
+def _normalize_report_dict(report):
+    if report is None:
+        return None
+    if hasattr(report, "model_dump"):
+        report = report.model_dump()
+    elif hasattr(report, "dict"):
+        report = report.dict()
+    if isinstance(report, dict):
+        return dict(report)
+    return {"report": str(report)}
+
+
+def _merge_reports(reports):
+    merged = []
+    key_to_index = {}
+
+    for report in reports or []:
+        normalized = _normalize_report_dict(report)
+        if not normalized:
+            continue
+
+        merge_key = (
+            str(normalized.get("symbol") or "").strip(),
+            str(normalized.get("signal") or "").strip(),
+            normalized.get("confidence_score"),
+            normalized.get("selected"),
+            str(normalized.get("buy_reason") or "").strip(),
+            str(normalized.get("review_comment") or "").strip(),
+        )
+
+        can_merge = any([merge_key[0], merge_key[1], merge_key[2] is not None])
+
+        if can_merge and merge_key in key_to_index:
+            target = merged[key_to_index[merge_key]]
+            existing_report = str(target.get("report") or "").strip()
+            incoming_report = str(normalized.get("report") or "").strip()
+            if incoming_report and incoming_report not in existing_report:
+                if existing_report:
+                    target["report"] = f"{existing_report}\n\n補充:\n{incoming_report}"
+                else:
+                    target["report"] = incoming_report
+            continue
+
+        if can_merge:
+            key_to_index[merge_key] = len(merged)
+        merged.append(normalized)
+
+    return merged
+
+
 def _reports_to_markdown(title, reports):
-    if not reports:
+    merged_reports = _merge_reports(reports)
+    if not merged_reports:
         return f"### {title}\n- 無資料"
 
     chunks = [f"### {title}"]
-    for index, report in enumerate(reports, start=1):
+    for index, report in enumerate(merged_reports, start=1):
         chunks.append(f"#### {title} #{index}")
         chunks.append(_report_to_markdown(report))
     return "\n\n".join(chunks)
@@ -157,9 +208,13 @@ def create_portfolio_manager(llm):
                     "3. 買進門檻 (依信心分數 0-10):\n"
                     "   - Score >= 7: Buy\n"
                     "   - Score < 7: Ignore\n"
-                    "4. 執行兩階段下單流程，每個階段皆只能做一次來模擬真實環境，請務必考量所有股票後再做決策，若沒有要下單的標的此階段可以跳過：\n"
-                    "   - 第一次：依整合後的結論呼叫 `create_stock_holding`，此呼叫必須包含參數 `reflection`: false。\n"
-                    "   - 第二次：接著呼叫 `retrieve_reflections`，要查詢較通用的邏輯，例如財務/技術/新聞/宏觀/產業的反思，不要查個股；將反思融入決策後再次呼叫 `create_stock_holding`，此呼叫必須包含 `reflection`: true。\n"
+                    "4. 嚴格工具呼叫協議（必須完全符合，否則視為流程失敗）：\n"
+                    "   - 先完成候選股評估，再開始下單；orders 中每一檔都必須滿足 position > 0。\n"
+                    "   - Tool Call #1：呼叫 `create_stock_holding`，且 reflection=false。\n"
+                    "   - Tool Call #2：呼叫 `retrieve_reflections`，查詢通用反思（財務/技術/新聞/宏觀/產業)，可以一次對這個 tool 發送多個請求。\n"
+                    "   - Tool Call #3：再次呼叫 `create_stock_holding`，且 reflection=true。\n"
+                    "   - 在 Tool Call #3 完成前，禁止呼叫 `PortfolioDecisions`。\n"
+                    "   - `create_stock_holding` 總共只能呼叫兩次，且 reflection 參數必須一 false 一 true，不可重複。\n"
                     "5. 完成上述兩階段流程後，使用 PortfolioDecisions 工具輸出結構化結果。"
                 ),
                 MessagesPlaceholder(variable_name="messages"),

@@ -173,6 +173,7 @@ class CompanyNewsRelation(Base):
     __tablename__ = 'companynewsrelation'
     news_id = Column(String(100), ForeignKey('companynews.id'), primary_key=True)
     company_id = Column(Integer, ForeignKey('company.id'), primary_key=True)
+    related_content = Column(String(10000), nullable=False)
 
     company = relationship('Company', back_populates="companyNewsRelation")
     companyNews = relationship('CompanyNews', back_populates="companyNewsRelation")

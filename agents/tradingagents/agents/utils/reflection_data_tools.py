@@ -9,21 +9,22 @@ from tradingagents.dataflows.interface import route_to_vendor
 
 @tool
 def retrieve_reflections(
-    query_text: Annotated[
-        str,
-        (
-            "Text query used to search similar historical reflections. "
-            "Few-shot examples: "
-            "1) 『在景氣下行期，財務體質轉弱但技術面短彈，如何避免誤判反轉？』 "
-            "2) 『面對政策利空與供應鏈去庫存時，新聞熱度與基本面背離的處理原則』 "
-            "3) 『AI 產業鏈中上游與下游的商業模式風險，如何反映在選股信心分數？』"
-        ),
-    ],
-    strategy: Annotated[str, "Optional strategy filter, e.g. monthly_revenue_growth_roe"] = None,
-    end_date: Annotated[str, "End date in yyyy-mm-dd format"] = None,
+    query_text: Annotated[str, "Natural-language query for retrieving similar reflection rules. Prefer generic decision rules (not single-stock details)."],
+    strategy: Annotated[str, "Optional strategy filter, e.g. monthly_revenue_growth_roe."] = None,
+    end_date: Annotated[str, "Optional date filter in yyyy-mm-dd format."] = None,
 ) -> str:
     """
     Retrieve historical reflections by semantic similarity with optional filters.
+
+    Query writing guide:
+    - Focus on reusable rules, not one-off stock events.
+    - Include condition + action to improve matching quality.
+    - Keep wording concrete and concise.
+
+    Good query examples:
+    1) 在景氣下行期，財務轉弱但技術反彈時，如何避免誤判反轉？
+    2) 當新聞熱度上升但基本面未改善時，應如何調整買進信心？
+    3) 高估值成長股在需求下修時，倉位與進場條件怎麼設定？
 
     Args:
         query_text (str): Natural language query used for vector retrieval.
@@ -44,17 +45,22 @@ def retrieve_reflections(
 
 @tool
 def store_reflections(
-    reflection_text: Annotated[str, "Text query used to search similar historical reflections"] = "",
-    strategy: Annotated[str, "Strategy tag for this reflection"] = "",
-    end_date: Annotated[str, "End date in yyyy-mm-dd format"] = "",
-    metadata_json: Annotated[str, "Optional extra metadata as JSON object string"] = "",
+    reflection_text: Annotated[str, "JSON list string of reflection rules to store. Write one reusable rule per item."] = "",
+    strategy: Annotated[str, "Strategy tag for these reflections."] = "",
+    end_date: Annotated[str, "Optional date in yyyy-mm-dd format."] = "",
+    metadata_json: Annotated[str, "Optional metadata JSON object string."] = "",
 ) -> str:
     """
     Store reflections (single or batch) to Qdrant/JSONL fallback.
-    - Input format is unified: always pass a JSON list string.
-        - Single example: [\"景氣循環末段若看到營收增速下滑、籌碼轉弱與負面政策消息共振，應降低買進信心\"] 
-        - Batch example: [\"面對高估值成長股，若財報優於預期且產業需求上修，可接受較高本益比\", "
-        "\"技術面突破但新聞來源集中且缺乏基本面支撐時，列為觀察不買進\"]
+
+    Writing guide (to improve future retrieval quality):
+    - Use generalized, reusable rules instead of stock-specific narratives.
+    - Prefer "condition -> action" format.
+    - Keep one rule per list item.
+
+    Unified payload format (always JSON list string):
+    - Single: [\"景氣循環末段若營收增速下滑且籌碼轉弱，應降低買進信心\"]
+    - Batch: [\"高估值成長股若需求下修，先降低部位再等待確認\", \"技術突破但缺乏基本面支撐時，列為觀察不追價\"]
 
     Args:
         reflection_text (str): Unified JSON list payload.

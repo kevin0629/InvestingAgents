@@ -47,16 +47,17 @@ def get_tavily_client() -> Any:
 def get_company_news(
     company_symbol: str,
     end_date: Optional[str] = None,
-    look_back_months: int = 1,
-    limit: int = 10,
+    look_back_days: Optional[int] = None,
+    limit: int = 5,
 ) -> str:
     """
     獲取公司新聞
     
     Args:
+        company_symbol: 股票代號，例如 "2330", "2455", "3491"
         end_date: 結束日期 (YYYY-MM-DD format), 如果為 None 則使用最新資料
-        look_back_months: 向前查詢的月份數，預設 1 個月
-        limit: 最多返回的新聞數量，預設 10 條
+        look_back_days: 向前查詢的天數，若為 None 表示不限時間
+        limit: 最多返回的新聞數量，預設 5 條
     
     Returns:
         string
@@ -68,11 +69,12 @@ def get_company_news(
     url = f"{base_url}/news/{company_symbol}"
 
     params = {
-        "look_back_months": look_back_months,
         "limit": limit,
     }
     if end_date:
         params["end_date"] = end_date
+    if look_back_days is not None:
+        params["look_back_days"] = look_back_days
 
     response = requests.get(url, params=params)
     response.raise_for_status()
@@ -100,7 +102,7 @@ def get_company_news(
 def get_macro_news(
     end_date: Optional[str] = None,
     look_back_days: int = 1,
-    limit: int = 200,
+    limit: int = 100,
 ) -> str:
     """Fetch macro news from the backend API."""
     base_url = get_backend_base_url()
@@ -237,5 +239,5 @@ def search_news_for_agent(
 
 
 if __name__ == "__main__":
-    # print(get_company_news("2455", "2024-06-01", look_back_months=3))
+    # print(get_company_news("2455", "2024-06-01", look_back_days=90))
     print(get_macro_news("2024-06-01", look_back_days=1))

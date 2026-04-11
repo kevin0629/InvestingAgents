@@ -23,7 +23,7 @@ class BacktestService:
     AVAILABLE_STRATEGIES = {
         "monthly_revenue_growth_roe": {
             "name": "monthly_revenue_growth_roe",
-            "description": "穩健營收動能策略: 篩選營收成長>24%、負債比<70%、自由現金流>0、流動比率>100%、EPS>0、ROE>0%的股票，並選取ROE最高的30檔",
+            "description": "穩健營收動能策略: 篩選營收成長>24%、負債比<70%、自由現金流>0、流動比率>100%、EPS>0、ROE>0%的股票，並選取ROE最高的2檔",
             "parameters": {
                 "mryoy_threshold": 24,
                 "dbr_threshold": 70,
@@ -31,7 +31,7 @@ class BacktestService:
                 "cr_threshold": 100,
                 "eps_threshold": 0,
                 "roe_threshold": 0,
-                "top_n": 30
+                "top_n": 2
             }
         }
     }
@@ -113,7 +113,7 @@ class BacktestService:
             strategy_name=strategy_name,
             strategy_description=strategy_config["description"],
             performance=performance,
-            previous_period_return=previous_period_return,
+            previous_period_return=str(previous_period_return)+"%",
             current_holdings=current_holdings,
             message=f"回測完成: 截止日 {end_date}"
         )
@@ -136,7 +136,7 @@ class BacktestService:
         cr_threshold = parameters.get("cr_threshold", 100)
         eps_threshold = parameters.get("eps_threshold", 0)
         roe_threshold = parameters.get("roe_threshold", 0)
-        top_n = parameters.get("top_n", 30)
+        top_n = parameters.get("top_n", 2)
         
         # 讀取資料
         mryoy = self.data.get("report:mryoy")
@@ -200,7 +200,11 @@ class BacktestService:
         
         tz = position.index.tz
         start, end = position.index[0], position.index[-1]
-        dates_10 = pd.date_range(start=start, end=end, freq='MS', tz=tz) + pd.DateOffset(days=9)
+        # Use month-starts then add 9 days to get the 10th of each month.
+        # Start from the first day of the start-month so that if `start` is on the
+        # 10th (or later) the month's 10th is still considered and later filtered.
+        range_start = start.replace(day=1)
+        dates_10 = pd.date_range(start=range_start, end=end, freq='MS', tz=tz) + pd.DateOffset(days=9)
         
         selected = []
         for d in dates_10:
@@ -384,6 +388,7 @@ class BacktestService:
 
         market_return = float((exit_price - entry_price) / entry_price)
         market_return = market_return - 0.00585  # 扣除交易成本: 交易稅 0.3% + 交易手續費 0.285%
+        market_return = round(market_return * 100, 4)
 
         return MarketReturnResponse(
             entry_sig_date=entry_sig_date,
@@ -392,7 +397,7 @@ class BacktestService:
             exit_trade_date=exit_trade_date,
             entry_price=entry_price,
             exit_price=exit_price,
-            market_return=market_return,
+            market_return=str(market_return)+"%",
             message="回測完成: 大盤績效模擬",
         )
 

@@ -17,12 +17,14 @@ router = APIRouter(prefix="/backtest", tags=["backtest"])
 @router.get("/report", response_model=BacktestReportResponse)
 async def get_backtest_report(
     strategy_name: str = Query(..., description="策略名稱"),
+    start_date: Optional[str] = Query(None, description="回測開始日期 (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="回測結束日期 (YYYY-MM-DD)"),
 ):
     """
     以指定的策略做回測，回傳策略績效報告、這一期持股、換股的清單
     
     - **strategy_name**: 策略名稱 (monthly_revenue_growth_roe)
+    - **start_date**: 回測開始日期，格式: YYYY-MM-DD，不提供則為資料最早日期
     - **end_date**: 回測結束日期，格式: YYYY-MM-DD，不提供則為今天
     
     回傳內容包括：
@@ -37,6 +39,7 @@ async def get_backtest_report(
         # 執行回測
         report = service.run_backtest(
             strategy_name=strategy_name,
+            start_date=start_date,
             end_date=end_date,
         )
         

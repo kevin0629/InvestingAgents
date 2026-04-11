@@ -68,9 +68,11 @@ def create_financial_analyst(llm):
                     "你可以使用的工具: {tool_names}\n"
                     "所有工具呼叫的 end_date 參數皆必須設為 {end_date}，為本次資料分析截止日期，嚴禁使用截止日期以後的資料。\n"
                     "分析步驟:\n"
-                    "Step1: task_type 為 {task_type}。若 `task_type` 是 VERIFICATION，代表這是庫存股，你必須先驗證 {buy_reason} 有沒有符合預期，並偵測盲點。\n"
-                    "若 `task_type` 是 HYBRID，代表這支股票上期與本期都被選到，你必須"
-                    "針對既有 buy_reason 的驗證（輸出到 financial_verification_reports，並將 selected 設為 true）\n\n"
+                    "Step1: task_type 為 {task_type}。"
+                    "若 task_type 是 ANALYSIS，代表這是新標的研究。\n"
+                    "若 task_type 是 VERIFICATION，代表這是庫存股，你必須先驗證 {buy_reason} 有沒有符合預期，並偵測盲點。\n"
+                    "若 task_type 是 HYBRID，代表這支股票上期與本期都被選到，你必須"
+                    "驗證既有 buy_reason（輸出到 financial_verification_reports，並將 selected 設為 true）\n\n"
                     "判斷標準範例:\n"
                     "- SUCCESS: 數據完全支持當初的論點（例如：預測毛利升，真的升了）\n"
                     "- FAILURE: 數據與預測相反（例如：預測營收增，結果持平或衰退）\n"
@@ -95,7 +97,11 @@ def create_financial_analyst(llm):
                     "- neutral: 市場已反映預期\n"
                     "- sell: 基本面轉弱或高估\n"
                     "- strong_sell: 基本面惡化 + 財務警訊\n"
-                    "完成分析後，請使用 FinancialOutput 工具輸出結構化結果，此工具只能使用一次，每次使用請確保輸入的資訊完整。"
+                    "完成分析後，請使用 FinancialOutput 工具輸出結構化結果。"
+                    "嚴格輸出規則（必須遵守）:\n"
+                    "- 每次只能輸出一種報告：`financial_analysis_reports` 或 `financial_verification_reports`，不可同時填寫兩者。\n"
+                    "- `task_type=ANALYSIS`：只能輸出 `financial_analysis_reports`，且僅 1 筆。\n"
+                    "- `task_type=VERIFICATION` 或 `task_type=HYBRID`：只能輸出 `financial_verification_reports`，且僅 1 筆。"
                 ),
                 MessagesPlaceholder(variable_name="messages"),
             ]
@@ -126,11 +132,22 @@ def create_financial_analyst(llm):
 
     def _format_node(state: FinancialState):
         last_msg = state["messages"][-1]
+        task = state.get("task")
+        task_type = str((task or {}).get("task_type") if isinstance(task, dict) else getattr(task, "task_type", "ANALYSIS"))
+
         for tc in (last_msg.tool_calls or []):
             if tc["name"] == "FinancialOutput":
                 args = tc["args"]
                 analysis     = [FinancialAnalysisReport(**r)     for r in (args.get("financial_analysis_reports")     or [])]
                 verification = [FinancialVerificationReport(**r) for r in (args.get("financial_verification_reports") or [])]
+
+                if task_type in {"VERIFICATION", "HYBRID"}:
+                    analysis = []
+                    verification = verification[:1]
+                else:
+                    verification = []
+                    analysis = analysis[:1]
+
                 return {
                     "financial_analysis_reports":     analysis,
                     "financial_verification_reports": verification,

@@ -59,9 +59,10 @@ def create_technical_analyst(llm):
                     "絕對不得使用超過此日期的任何資料。\n\n"
                     "你可以使用下列工具: {tool_names}\n\n"
                     "任務指引: task_type 為 {task_type}。"
+                    "若 task_type 是 ANALYSIS，代表這是新標的研究。\n"
                     "若 task_type 是 VERIFICATION，代表這是庫存股，你必須先驗證購買理由「{buy_reason}」有沒有符合預期，並偵測盲點，確認沒有忽略其他狀況，再分析未來並決定是否繼續持有或加碼減碼。\n\n"
                     "若 task_type 是 HYBRID，代表這支股票上期與本期都被選到，你必須"
-                    "驗證既有 buy_reason（輸出 technical_verification_reports，selected 必須是 true）\n\n"
+                    "驗證既有 buy_reason（輸出 technical_verification_reports，selected 必須是 true）。\n\n"
                     "在分析 {symbol} 的技術面時，請從以下層面全面評估：\n"
                     "1. 趨勢與價位分析: 判斷長期/中期/短期趨勢（上升/下降/盤整），指出關鍵支撐與壓力區間\n"
                     "2. 技術指標分析:\n"
@@ -77,6 +78,10 @@ def create_technical_analyst(llm):
                     "- sell: 長期空頭，中期反彈無力\n"
                     "- strong_sell: 長中短期皆空頭，RSI 無底部背離，成交量配合價跌\n\n"
                     "完成分析後，請使用 TechnicalOutput 工具輸出結構化結果。"
+                    "嚴格輸出規則（必須遵守）:\n"
+                    "- 每次只能輸出一種報告：`technical_analysis_reports` 或 `technical_verification_reports`，不可同時填寫兩者。\n"
+                    "- `task_type=ANALYSIS`：只能輸出 `technical_analysis_reports`，且僅 1 筆。\n"
+                    "- `task_type=VERIFICATION` 或 `task_type=HYBRID`：只能輸出 `technical_verification_reports`，且僅 1 筆。"
                     ),
                 MessagesPlaceholder(variable_name="messages"),
             ]
@@ -105,11 +110,22 @@ def create_technical_analyst(llm):
 
     def _format_node(state: TechnicalState):
         last_msg = state["messages"][-1]
+        task = state.get("task")
+        task_type = str((task or {}).get("task_type") if isinstance(task, dict) else getattr(task, "task_type", "ANALYSIS"))
+
         for tc in (last_msg.tool_calls or []):
             if tc["name"] == "TechnicalOutput":
                 args = tc["args"]
                 analysis     = [TechnicalAnalysisReport(**r)     for r in (args.get("technical_analysis_reports")     or [])]
                 verification = [TechnicalVerificationReport(**r) for r in (args.get("technical_verification_reports") or [])]
+
+                if task_type in {"VERIFICATION", "HYBRID"}:
+                    analysis = []
+                    verification = verification[:1]
+                else:
+                    verification = []
+                    analysis = analysis[:1]
+
                 return {
                     "technical_analysis_reports":     analysis,
                     "technical_verification_reports": verification,

@@ -91,8 +91,8 @@ def get_market_return(
     url = f"{base_url}/backtest/cal_market_return"
 
     params: Dict[str, Any] = {
-        "start_date": start_date,
-        "end_date": end_date,
+        "entry_sig_date": start_date,
+        "exit_sig_date": end_date,
     }
 
     response = requests.get(url, params=params)

@@ -27,7 +27,7 @@ from tradingagents.agents.utils.agent_states import NewsState
 def create_news_analyst(llm):
     """回傳 News Analyst 的 compiled subgraph。"""
     tools = [
-        # get_company_news,
+        get_company_news,
         NewsOutput,
     ]
 
@@ -60,6 +60,7 @@ def create_news_analyst(llm):
                     "絕對不得使用超過此日期的任何資料。\n\n"
                     "你可以使用下列工具: {tool_names}\n\n"
                     "任務指引: task_type 為 {task_type}。"
+                    "若 task_type 是 ANALYSIS，代表這是新標的研究，使用 `get_company_news` 工具時，look_back_days 務必設定為 None。而若是 VERIFICATION 或 HYBRID，look_back_days 務必設定為 30。\n"
                     "若 task_type 是 VERIFICATION，代表這是庫存股，你必須驗證購買理由「{buy_reason}」有沒有符合預期，並偵測盲點，確認沒有忽略其他狀況。\n\n"
                     "若 task_type 是 HYBRID，代表這支股票上期與本期都被選到，你必須"
                     "驗證既有 buy_reason（輸出 news_verification_reports，selected 必須是 true）\n\n"
@@ -70,6 +71,10 @@ def create_news_analyst(llm):
                     "- sell: 潛在風險增加或策略不確定\n"
                     "- strong_sell: 重大負面事件或決策錯誤\n\n"
                     "完成分析後，請使用 NewsOutput 工具輸出結構化結果。"
+                    "嚴格輸出規則（必須遵守）:\n"
+                    "- 每次只能輸出一種報告：`news_analysis_reports` 或 `news_verification_reports`，不可同時填寫兩者。\n"
+                    "- `task_type=ANALYSIS`：只能輸出 `news_analysis_reports`，且僅 1 筆。\n"
+                    "- `task_type=VERIFICATION` 或 `task_type=HYBRID`：只能輸出 `news_verification_reports`，且僅 1 筆。"
                     ),
                 MessagesPlaceholder(variable_name="messages"),
             ]
@@ -80,7 +85,7 @@ def create_news_analyst(llm):
             end_date=end_date,
             task_type=task.task_type,
             company_info=task.company_info,
-            buy_reason=task.buy_reason if task.task_type == "VERIFICATION" else "N/A",
+            buy_reason=task.buy_reason if task.task_type in {"VERIFICATION", "HYBRID"} else "N/A",
         )
         prompt = prompt.partial(tool_names=tool_names)
 
@@ -100,11 +105,22 @@ def create_news_analyst(llm):
 
     def _format_node(state: NewsState):
         last_msg = state["messages"][-1]
+        task = state.get("task")
+        task_type = str((task or {}).get("task_type") if isinstance(task, dict) else getattr(task, "task_type", "ANALYSIS"))
+
         for tc in (last_msg.tool_calls or []):
             if tc["name"] == "NewsOutput":
                 args = tc["args"]
                 analysis     = [NewsAnalysisReport(**r)     for r in (args.get("news_analysis_reports")     or [])]
                 verification = [NewsVerificationReport(**r) for r in (args.get("news_verification_reports") or [])]
+
+                if task_type in {"VERIFICATION", "HYBRID"}:
+                    analysis = []
+                    verification = verification[:1]
+                else:
+                    verification = []
+                    analysis = analysis[:1]
+
                 return {
                     "news_analysis_reports":     analysis,
                     "news_verification_reports": verification,

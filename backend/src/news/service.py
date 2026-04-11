@@ -27,24 +27,36 @@ class NewsService:
     def _get_end_datetime(self, end_date: Optional[str]) -> datetime:
         return self._normalize_end_date(end_date) or datetime.combine(date.today(), datetime.max.time())
 
-    def _get_start_datetime_for_months(self, end_datetime: datetime, look_back_months: int) -> datetime:
-        days = max(look_back_months, 1) * 30
-        return end_datetime - timedelta(days=days)
-
     def _get_start_datetime_for_days(self, end_datetime: datetime, look_back_days: int) -> datetime:
         days = max(look_back_days, 1)
         return end_datetime - timedelta(days=days)
 
-    async def get_company_news(self, company_symbol: str, end_date: Optional[str] = None, look_back_months: int = 1, limit: int = 10) -> List[dict]:
+    def _extract_first_paragraph(self, content: Optional[str]) -> str:
+        text = (content or "").strip()
+        if not text:
+            return ""
+
+        # News sources often separate paragraphs with a single newline, not blank lines.
+        # Take the first non-empty line as the first paragraph/sentence block.
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if lines:
+            return lines[0]
+
+        return text
+
+    async def get_company_news(self, company_symbol: str, end_date: Optional[str] = None, look_back_days: Optional[int] = None, limit: int = 10) -> List[dict]:
         end_datetime = self._get_end_datetime(end_date)
-        target_limit = max(limit, 10)
-        start_datetime = self._get_start_datetime_for_months(end_datetime, look_back_months)
+        start_datetime = (
+            self._get_start_datetime_for_days(end_datetime, look_back_days)
+            if look_back_days is not None
+            else None
+        )
 
         base_stmt = (
             select(
                 CompanyNews.id,
                 CompanyNews.title,
-                CompanyNews.content,
+                CompanyNewsRelation.related_content.label("content"),
                 CompanyNews.published_at,
                 CompanyNews.link,
                 Company.symbol.label("company_symbol"),
@@ -53,40 +65,34 @@ class NewsService:
             .join(CompanyNewsRelation, CompanyNewsRelation.news_id == CompanyNews.id)
             .join(Company, Company.id == CompanyNewsRelation.company_id)
             .where(Company.symbol == company_symbol)
+            .where(CompanyNews.published_at <= end_datetime)
             .order_by(CompanyNews.published_at.desc())
+            .limit(limit)
         )
 
-        def _build_stmt(window_start: datetime, window_end: datetime) -> object:
-            return (
-                base_stmt
-                .where(CompanyNews.published_at >= window_start)
-                .where(CompanyNews.published_at <= window_end)
-                .limit(target_limit)
-            )
+        stmt = base_stmt
+        if start_datetime is not None:
+            stmt = stmt.where(CompanyNews.published_at >= start_datetime)
+
         async with self.db.async_session() as session:
-            result = await session.execute(_build_stmt(start_datetime, end_datetime))
+            result = await session.execute(stmt)
             rows = [dict(row) for row in result.mappings().all()]
+            processed = []
+            for row in rows:
+                item = dict(row)
+                pa = item.get("published_at")
+                if isinstance(pa, datetime):
+                    item["published_at"] = pa.strftime("%Y-%m-%d")
+                else:
+                    # fallback to str slice
+                    try:
+                        item["published_at"] = str(pa)[:10]
+                    except Exception:
+                        item["published_at"] = None
+                processed.append(item)
+            return processed
 
-            if len(rows) <= 1:
-                earliest_start = end_datetime - timedelta(days=365)
-                last_count = len(rows)
-
-                while start_datetime > earliest_start:
-                    start_datetime = max(
-                        earliest_start,
-                        self._get_start_datetime_for_months(start_datetime, look_back_months),
-                    )
-                    expanded_result = await session.execute(_build_stmt(start_datetime, end_datetime))
-                    rows = [dict(row) for row in expanded_result.mappings().all()]
-                    if len(rows) == last_count:
-                        break
-                    last_count = len(rows)
-                    if last_count >= target_limit:
-                        break
-
-            return rows[:limit]
-
-    async def get_macro_news(self, end_date: Optional[str] = None, look_back_days: int = 7, limit: int = 50) -> List[dict]:
+    async def get_macro_news(self, end_date: Optional[str] = None, look_back_days: int = 7, limit: int = 100) -> List[dict]:
         end_datetime = self._get_end_datetime(end_date)
         start_datetime = self._get_start_datetime_for_days(end_datetime, look_back_days)
 
@@ -108,4 +114,17 @@ class NewsService:
         async with self.db.async_session() as session:
             result = await session.execute(stmt)
             rows = result.mappings().all()
-            return [dict(row) for row in rows]
+            processed_rows = []
+            for row in rows:
+                item = dict(row)
+                item["content"] = self._extract_first_paragraph(item.get("content"))
+                pa = item.get("published_at")
+                if isinstance(pa, datetime):
+                    item["published_at"] = pa.strftime("%Y-%m-%d")
+                else:
+                    try:
+                        item["published_at"] = str(pa)[:10]
+                    except Exception:
+                        item["published_at"] = None
+                processed_rows.append(item)
+            return processed_rows
