@@ -44,7 +44,9 @@ def create_news_analyst(llm):
                 (
                     "system",
                     "你是一位專業且嚴謹的新聞分析師，專注於從新聞事件中提煉出影響股價的關鍵催化劑，並將其轉化為可判斷股價影響的投資訊號。\n"
-                    "你的分析將直接影響投資決策，因此必須確保資訊篩選準確、邏輯一致，並避免噪音干擾。\n"
+                    "你的分析將提供給 Portfolio Manager 參考，請務必盡可能詳細地提供信息，並附上具體、可操作的見解和佐證，幫助 Portfolio Manager 做出明智的決策。\n"
+                    "如果你無法完全回答，沒關係；另一位助手會使用不同的工具來幫助你繼續完成未完成的工作。請盡你所能，努力取得進展。\n"
+                    "交易規則：交易頻率為每月一次。不執行分批建倉、減倉、停損或停利等交易設定。\n"
                     "你的核心目標是：\n"
                     "1. 從新聞中識別對 {symbol} 有影響的關鍵事件\n"
                     "2. 判斷事件對公司的影響方向（正面 / 負面 / 中性）\n"
@@ -59,11 +61,10 @@ def create_news_analyst(llm):
                     "所有工具呼叫的 end_date 參數皆必須設為 {end_date}，為本次資料分析截止日期，"
                     "絕對不得使用超過此日期的任何資料。\n\n"
                     "你可以使用下列工具: {tool_names}\n\n"
-                    "任務指引: task_type 為 {task_type}。"
+                    "任務指引: task_type 為 {task_type}."
                     "若 task_type 是 ANALYSIS，代表這是新標的研究，使用 `get_company_news` 工具時，look_back_days 務必設定為 None。而若是 VERIFICATION 或 HYBRID，look_back_days 務必設定為 30。\n"
-                    "若 task_type 是 VERIFICATION，代表這是庫存股，你必須驗證購買理由「{buy_reason}」有沒有符合預期，並偵測盲點，確認沒有忽略其他狀況。\n\n"
-                    "若 task_type 是 HYBRID，代表這支股票上期與本期都被選到，你必須"
-                    "驗證既有 buy_reason（輸出 news_verification_reports，selected 必須是 true）\n\n"
+                    "若 task_type 為 VERIFICATION（庫存股）或 HYBRID（連續被選中），請驗證購買理由「{buy_reason}」是否符合預期並偵測盲點："
+                    "若為 VERIFICATION，輸出 news_verification_reports，且 selected 必須為 false；若為 HYBRID，輸出 news_verification_reports，且 selected 必須為 true。\n\n"
                     "投資建議標準:\n"
                     "- strong_buy: 事件顯著提升長期競爭力或護城河\n"
                     "- buy: 有成長催化，但存在短期不確定性\n"
@@ -117,6 +118,11 @@ def create_news_analyst(llm):
                 if task_type in {"VERIFICATION", "HYBRID"}:
                     analysis = []
                     verification = verification[:1]
+                    forced_selected = task_type == "HYBRID"
+                    verification = [
+                        report.model_copy(update={"selected": forced_selected})
+                        for report in verification
+                    ]
                 else:
                     verification = []
                     analysis = analysis[:1]

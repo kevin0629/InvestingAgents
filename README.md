@@ -14,3 +14,6 @@
 ## 使用 Gemini Embedding API
 因為免費，且每天用量已足夠做研究使用
 > 支持每分鐘 **100** requests， 每分鐘 30K input tokens，每天 **1000** requests
+
+## Tradingagents 使用方法
+1. 輸入策略以及截止日期，截止日期務必是進場訊號的日期!

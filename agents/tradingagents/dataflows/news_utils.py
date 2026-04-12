@@ -48,7 +48,7 @@ def get_company_news(
     company_symbol: str,
     end_date: Optional[str] = None,
     look_back_days: Optional[int] = None,
-    limit: int = 5,
+    limit: int = 10,
 ) -> str:
     """
     獲取公司新聞
@@ -57,7 +57,7 @@ def get_company_news(
         company_symbol: 股票代號，例如 "2330", "2455", "3491"
         end_date: 結束日期 (YYYY-MM-DD format), 如果為 None 則使用最新資料
         look_back_days: 向前查詢的天數，若為 None 表示不限時間
-        limit: 最多返回的新聞數量，預設 5 條
+        limit: 最多返回的新聞數量，預設 10 條
     
     Returns:
         string

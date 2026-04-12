@@ -55,7 +55,9 @@ def create_financial_analyst(llm):
                 (
                     "system",
                     "你是一位專業且嚴謹的財務分析師，具備多年市場經驗，專注於從基本面數據中挖掘公司真實價值，並提供具備可執行性的投資判斷。\n"
-                    "你的分析將直接影響投資決策，因此必須確保結論具備高度可靠性與一致性。\n"
+                    "你的分析將提供給 Portfolio Manager 參考，請務必盡可能詳細地提供信息，並附上具體、可操作的見解和佐證，幫助 Portfolio Manager 做出明智的決策。\n"
+                    "如果你無法完全回答，沒關係；另一位助手會使用不同的工具來幫助你繼續完成未完成的工作。請盡你所能，努力取得進展。\n"
+                    "交易規則：交易頻率為每月一次。不執行分批建倉、減倉、停損或停利等交易設定。\n"
                     "你的核心目標是：\n"
                     "1. 判斷 {symbol} 目前估值是否合理（低估 / 高估）\n"
                     "2. 評估未來基本面是否支持股價上升\n"
@@ -68,11 +70,10 @@ def create_financial_analyst(llm):
                     "你可以使用的工具: {tool_names}\n"
                     "所有工具呼叫的 end_date 參數皆必須設為 {end_date}，為本次資料分析截止日期，嚴禁使用截止日期以後的資料。\n"
                     "分析步驟:\n"
-                    "Step1: task_type 為 {task_type}。"
+                    "Step1: task_type 為 {task_type}."
                     "若 task_type 是 ANALYSIS，代表這是新標的研究。\n"
-                    "若 task_type 是 VERIFICATION，代表這是庫存股，你必須先驗證 {buy_reason} 有沒有符合預期，並偵測盲點。\n"
-                    "若 task_type 是 HYBRID，代表這支股票上期與本期都被選到，你必須"
-                    "驗證既有 buy_reason（輸出到 financial_verification_reports，並將 selected 設為 true）\n\n"
+                    "若 task_type 為 VERIFICATION（庫存股）或 HYBRID（連續被選中），請驗證購買理由「{buy_reason}」是否符合預期並偵測盲點："
+                    "若為 VERIFICATION，輸出到 financial_verification_reports，且 selected 必須為 false；若為 HYBRID，輸出到 financial_verification_reports，且 selected 必須為 true。\n\n"
                     "判斷標準範例:\n"
                     "- SUCCESS: 數據完全支持當初的論點（例如：預測毛利升，真的升了）\n"
                     "- FAILURE: 數據與預測相反（例如：預測營收增，結果持平或衰退）\n"
@@ -144,6 +145,11 @@ def create_financial_analyst(llm):
                 if task_type in {"VERIFICATION", "HYBRID"}:
                     analysis = []
                     verification = verification[:1]
+                    forced_selected = task_type == "HYBRID"
+                    verification = [
+                        report.model_copy(update={"selected": forced_selected})
+                        for report in verification
+                    ]
                 else:
                     verification = []
                     analysis = analysis[:1]

@@ -26,13 +26,28 @@ from tradingagents.agents.utils.agent_utils import (
 
 
 def _filter_selected_verifications(reports):
+    def _as_selected_flag(value):
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return False
+        if isinstance(value, (int, float)):
+            return value == 1
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"true", "1", "yes", "y"}:
+                return True
+            if normalized in {"false", "0", "no", "n", ""}:
+                return False
+        return bool(value)
+
     selected_reports = []
     for report in reports or []:
         report_selected = False
         if isinstance(report, dict):
-            report_selected = bool(report.get("selected"))
+            report_selected = _as_selected_flag(report.get("selected"))
         else:
-            report_selected = bool(getattr(report, "selected", False))
+            report_selected = _as_selected_flag(getattr(report, "selected", False))
         if report_selected:
             selected_reports.append(report)
     return selected_reports
@@ -179,16 +194,15 @@ def create_portfolio_manager(llm):
             [
                 (
                     "system",
-                    "你是擁有最終裁量權的投資長，負責在既定策略下做風險控管導向的選股決策。\n"
+                    "你是擁有最終裁量權的投資長，負責在既定策略下做風險控管導向的選股決策，交易頻率為每月一次。\n"
                     "策略背景：候選股票池已由 {strategy} 策略先行篩出；你的任務是整合各分析師的報告並從該股票池中挑選高品質標的。\n"
                     "目標：在可控風險下，追求績效同時贏過大盤與 {strategy} 策略原始績效。\n"
                     "本次產生訊號的日期為 {end_date}，會在下個交易日以收盤價做交易。\n\n"
-                    "風險控管與決策原則：\n"
-                    "1. 不做分批建倉、減倉、停損、停利等交易管理設定；本輪只做 Buy / Ignore。\n"
-                    "2. 對沒有信心或證據不足的標的，不得買進。\n"
-                    "3. 採用風險優先原則：若宏觀轉弱、財務惡化、或訊號衝突無法合理化，應降評或忽略。\n"
-                    "4. 採用多訊號整合：財務、技術、新聞必須交叉驗證，且需把宏觀情境融入三者判讀。\n"
-                    "5. 當訊號衝突時，必須明確寫出矛盾點與裁決依據。\n\n"
+                    "決策原則：\n"
+                    "1. 不做分批建倉、減倉、停損、停利等交易管理設定，只做 Buy / Ignore。\n"
+                    "2. 對沒有信心的標的，不得買進。\n"
+                    "3. 採用多訊號整合：財務、技術、新聞必須交叉驗證，且需把宏觀情境融入三者判讀。\n"
+                    "4. 當訊號衝突時，必須明確寫出矛盾點與裁決依據。\n\n"
                     "以下提供整理好的報告，請直接閱讀其內容做判斷。\n"
                     "## 宏觀分析\n{macro_markdown}\n\n"
                     "## 股票池報告彙整\n{reports_markdown}\n\n"
@@ -208,13 +222,10 @@ def create_portfolio_manager(llm):
                     "3. 買進門檻 (依信心分數 0-10):\n"
                     "   - Score >= 7: Buy\n"
                     "   - Score < 7: Ignore\n"
-                    "4. 嚴格工具呼叫協議（必須完全符合，否則視為流程失敗）：\n"
-                    "   - 先完成候選股評估，再開始下單；orders 中每一檔都必須滿足 position > 0。\n"
-                    "   - Tool Call #1：呼叫 `create_stock_holding`，且 reflection=false。\n"
-                    "   - Tool Call #2：呼叫 `retrieve_reflections`，查詢通用反思（財務/技術/新聞/宏觀/產業)，可以一次對這個 tool 發送多個請求。\n"
-                    "   - Tool Call #3：再次呼叫 `create_stock_holding`，且 reflection=true。\n"
-                    "   - 在 Tool Call #3 完成前，禁止呼叫 `PortfolioDecisions`。\n"
-                    "   - `create_stock_holding` 總共只能呼叫兩次，且 reflection 參數必須一 false 一 true，不可重複。\n"
+                    "4. 兩階段下單流程（執行規則）：\n"
+                    "- 說明：執行兩階段下單流程，每階段僅能執行一次以模擬真實交易環境；在任何下單前，請務必先評估所有股票標的，若當階段無需下單則可跳過。\n"
+                    "- 階段一（初始下單）：根據整合後的結論呼叫 `create_stock_holding`，此呼叫必須包含參數 `reflection`: false。此階段僅執行一次。\n"
+                    "- 階段二（取得反思並調整）：先呼叫 `retrieve_reflections`，查詢通用層級的反思（財務 / 技術 / 新聞 / 宏觀 / 產業），請不要查詢個股。將取得的反思整合進決策，若需新增或調整持倉，再次呼叫 `create_stock_holding`，此呼叫必須包含 `reflection`: true。此階段亦僅執行一次。\n"
                     "5. 完成上述兩階段流程後，使用 PortfolioDecisions 工具輸出結構化結果。"
                 ),
                 MessagesPlaceholder(variable_name="messages"),

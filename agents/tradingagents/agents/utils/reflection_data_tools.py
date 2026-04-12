@@ -48,7 +48,6 @@ def store_reflections(
     reflection_text: Annotated[str, "JSON list string of reflection rules to store. Write one reusable rule per item."] = "",
     strategy: Annotated[str, "Strategy tag for these reflections."] = "",
     end_date: Annotated[str, "Optional date in yyyy-mm-dd format."] = "",
-    metadata_json: Annotated[str, "Optional metadata JSON object string."] = "",
 ) -> str:
     """
     Store reflections (single or batch) to Qdrant/JSONL fallback.
@@ -66,7 +65,6 @@ def store_reflections(
         reflection_text (str): Unified JSON list payload.
         strategy (str): Strategy tag.
         end_date (str): End date in yyyy-mm-dd format.
-        metadata_json (str): Optional additional metadata JSON object string.
 
     Returns:
         str: Storage status message.
@@ -76,15 +74,6 @@ def store_reflections(
         return "reflection_text is required and must be a JSON list string"
 
     metadata = {}
-    if metadata_json:
-        try:
-            parsed = json.loads(metadata_json)
-            if isinstance(parsed, dict):
-                metadata.update(parsed)
-        except json.JSONDecodeError:
-            # Keep metadata empty on invalid JSON to avoid breaking the tool call.
-            pass
-
     if strategy:
         metadata["strategy"] = strategy
     if end_date:

@@ -23,7 +23,7 @@ class BacktestService:
     AVAILABLE_STRATEGIES = {
         "monthly_revenue_growth_roe": {
             "name": "monthly_revenue_growth_roe",
-            "description": "穩健營收動能策略: 篩選營收成長>24%、負債比<70%、自由現金流>0、流動比率>100%、EPS>0、ROE>0%的股票，並選取ROE最高的2檔",
+            "description": "穩健營收動能策略: 篩選營收成長>24%、負債比<70%、自由現金流>0、流動比率>100%、EPS>0、ROE>0%的股票，並選取ROE最高的20檔",
             "parameters": {
                 "mryoy_threshold": 24,
                 "dbr_threshold": 70,
@@ -31,7 +31,7 @@ class BacktestService:
                 "cr_threshold": 100,
                 "eps_threshold": 0,
                 "roe_threshold": 0,
-                "top_n": 2
+                "top_n": 20
             }
         }
     }
@@ -136,7 +136,7 @@ class BacktestService:
         cr_threshold = parameters.get("cr_threshold", 100)
         eps_threshold = parameters.get("eps_threshold", 0)
         roe_threshold = parameters.get("roe_threshold", 0)
-        top_n = parameters.get("top_n", 2)
+        top_n = parameters.get("top_n", 20)
         
         # 讀取資料
         mryoy = self.data.get("report:mryoy")
@@ -266,7 +266,7 @@ class BacktestService:
         entry_sig_dates = pd.to_datetime(recent_trades["entry_sig_date"], errors="coerce")
         exit_sig_dates = pd.to_datetime(recent_trades["exit_sig_date"], errors="coerce")
 
-        mask1 = (exit_sig_dates >= end_date) | (exit_sig_dates.isna())
+        mask1 = (exit_sig_dates.isna()) | (exit_sig_dates >= end_date)
         previous_period_mask = mask1 & (entry_sig_dates < end_date)
 
         positions = pd.to_numeric(recent_trades["position"], errors="coerce").fillna(0.0)
