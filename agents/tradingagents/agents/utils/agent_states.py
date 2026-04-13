@@ -96,5 +96,5 @@ class AgentState(MessagesState):
     macro_analysis_report: MacroAnalysisReport
     
     critic_reflections: Annotated[List[str], operator.add]
-    portfolio_decisions: Annotated[List[PortfolioDecision], operator.add]
+    portfolio_reports: Annotated[List[PortfolioReport], operator.add]
 

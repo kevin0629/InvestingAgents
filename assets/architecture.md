@@ -1,1 +1,0 @@
-*create-backend-architecture 後端 Python FastAPI，資料庫 PostgreSQL。agent framework 使用 Python Langchain、Langgraph 最新版本(v1.0)，使用 Agent Chat UI 來做互動，也使用 Langfuse 來坐進一步的 agent 細緻的效果分析，向量資料庫使用 Qdrant

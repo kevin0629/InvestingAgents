@@ -9,10 +9,21 @@ import pandas as pd
 from .config import get_config
 from .backtest_utils import get_backtest_sim
 
-SIGNAL_HEADERS = ["stock", "position", "entry_sig_date", "buy_reason"]
+SIGNAL_HEADERS = [
+    "stock",
+    "position",
+    "entry_sig_date",
+    "buy_reason",
+    "growth_score",
+    "value_score",
+    "turnaround_score",
+]
 HOLDING_HEADERS = [
     "stock",
     "buy_reason",
+    "growth_score",
+    "value_score",
+    "turnaround_score",
     "entry_sig_date",
     "exit_sig_date",
     "entry_date",
@@ -249,6 +260,9 @@ def _normalize_orders(orders: List[Dict[str, Any]], signal_date: str) -> List[Di
                 "position": position,
                 "entry_sig_date": entry_sig_date,
                 "buy_reason": str(order.get("buy_reason") or "").strip(),
+                "growth_score": _safe_int(order.get("growth_score"), 0) or 0,
+                "value_score": _safe_int(order.get("value_score"), 0) or 0,
+                "turnaround_score": _safe_int(order.get("turnaround_score"), 0) or 0,
             }
         )
     return normalized
@@ -261,8 +275,8 @@ def _parse_orders_payload(parsed_orders: Any, signal_date: str) -> List[Dict[str
     2) 新格式（推薦）:
        {
          "orders": [
-           {"stock": "2330", "position": 0.35, "buy_reason": "..."},
-           {"stock": "2454", "position": 0.2, "buy_reason": "..."}
+                     {"stock": "2330", "position": 0.35, "buy_reason": "...", "growth_score": 8, "value_score": 6, "turnaround_score": 4},
+                     {"stock": "2454", "position": 0.2, "buy_reason": "...", "growth_score": 7, "value_score": 5, "turnaround_score": 3}
          ]
        }
     """
@@ -292,6 +306,9 @@ def _parse_orders_payload(parsed_orders: Any, signal_date: str) -> List[Dict[str
                     "position": parsed_position,
                     "entry_sig_date": entry_sig_date,
                     "buy_reason": str(order.get("buy_reason") or "").strip(),
+                    "growth_score": _safe_int(order.get("growth_score"), 0) or 0,
+                    "value_score": _safe_int(order.get("value_score"), 0) or 0,
+                    "turnaround_score": _safe_int(order.get("turnaround_score"), 0) or 0,
                 }
             )
         return parsed_order_rows
@@ -312,12 +329,15 @@ def _parse_orders_payload(parsed_orders: Any, signal_date: str) -> List[Dict[str
                     "position": parsed_position,
                     "entry_sig_date": signal_date,
                     "buy_reason": "",
+                    "growth_score": 0,
+                    "value_score": 0,
+                    "turnaround_score": 0,
                 }
             )
         return parsed_order_rows
 
     raise ValueError(
-        "orders JSON 必須是 Dict。建議格式: {\"orders\": [{\"stock\": \"2330\", \"position\": 0.35, \"buy_reason\": \"...\"}]}"
+        "orders JSON 必須是 Dict。建議格式: {\"orders\": [{\"stock\": \"2330\", \"position\": 0.35, \"buy_reason\": \"...\", \"growth_score\": 8, \"value_score\": 6, \"turnaround_score\": 4}]}"
     )
 
 
@@ -466,39 +486,46 @@ def _load_signal_payload(
     trade_mode: str,
     signal_date: Optional[str] = None,
     signal_path: Optional[str] = None,
-) -> Tuple[Optional[Dict[str, float]], Optional[Dict[str, str]], Optional[str]]:
+) -> Tuple[Optional[Dict[str, float]], Optional[Dict[str, str]], Optional[Dict[str, Dict[str, int]]], Optional[str]]:
     resolved_signal_path = signal_path
     if not resolved_signal_path:
         resolved_signal_path = _signal_csv_path_by_date(strategy, trade_mode, signal_date) if signal_date else _latest_dated_signal_csv_path(strategy, trade_mode)
 
     if not resolved_signal_path:
-        return None, None, f"找不到可用的 signal: {trade_mode}"
+        return None, None, None, f"找不到可用的 signal: {trade_mode}"
 
     if not os.path.exists(resolved_signal_path):
-        return None, None, f"找不到可用的 signal: {resolved_signal_path}"
+        return None, None, None, f"找不到可用的 signal: {resolved_signal_path}"
 
     signal_df = _read_csv_df(resolved_signal_path, SIGNAL_HEADERS)
     if signal_df.empty:
-        return None, None, f"找不到可用的 signal: {resolved_signal_path}"
+        return None, None, None, f"找不到可用的 signal: {resolved_signal_path}"
 
     payload: Dict[str, float] = {}
     buy_reason_map: Dict[str, str] = {}
+    kpi_score_map: Dict[str, Dict[str, int]] = {}
     for row in signal_df.to_dict(orient="records"):
         stock = str(row.get("stock") or "").strip()
         if not stock:
             continue
         payload[stock] = _safe_float(row.get("position"), 0.0)
         buy_reason_map[stock] = str(row.get("buy_reason") or "").strip()
+        kpi_score_map[stock] = {
+            "growth_score": _safe_int(row.get("growth_score"), 0) or 0,
+            "value_score": _safe_int(row.get("value_score"), 0) or 0,
+            "turnaround_score": _safe_int(row.get("turnaround_score"), 0) or 0,
+        }
 
     if not payload:
-        return None, None, "signal.csv 沒有可用股票資料"
-    return payload, buy_reason_map, None
+        return None, None, None, "signal.csv 沒有可用股票資料"
+    return payload, buy_reason_map, kpi_score_map, None
 
 
 def _build_holding_rows_from_performance(
     holdings_performance: List[Dict[str, Any]],
     signal_date: str,
     buy_reason_map: Optional[Dict[str, str]] = None,
+    kpi_score_map: Optional[Dict[str, Dict[str, int]]] = None,
 ) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
 
@@ -514,6 +541,9 @@ def _build_holding_rows_from_performance(
             {
                 "stock": stock,
                 "buy_reason": str((buy_reason_map or {}).get(stock) or holding.get("buy_reason") or "").strip(),
+                "growth_score": _safe_int((kpi_score_map or {}).get(stock, {}).get("growth_score", holding.get("growth_score")), 0) or 0,
+                "value_score": _safe_int((kpi_score_map or {}).get(stock, {}).get("value_score", holding.get("value_score")), 0) or 0,
+                "turnaround_score": _safe_int((kpi_score_map or {}).get(stock, {}).get("turnaround_score", holding.get("turnaround_score")), 0) or 0,
                 "entry_sig_date": _normalize_date_value(holding.get("entry_sig_date"), signal_date),
                 "exit_sig_date": str(holding.get("exit_sig_date") or ""),
                 "entry_date": str(holding.get("entry_date") or signal_date),
@@ -537,12 +567,14 @@ def _resolve_holding_rows(
     report_data: Dict[str, Any],
     signal_date: str,
     buy_reason_map: Optional[Dict[str, str]] = None,
+    kpi_score_map: Optional[Dict[str, Dict[str, int]]] = None,
 ) -> List[Dict[str, Any]]:
     holdings_performance = report_data.get("holdings_performance", []) if isinstance(report_data, dict) else []
     return _build_holding_rows_from_performance(
         holdings_performance=holdings_performance,
         signal_date=signal_date,
         buy_reason_map=buy_reason_map,
+        kpi_score_map=kpi_score_map,
     )
 
 
@@ -552,6 +584,7 @@ def _apply_backtest_to_holding(
     signal_date: str,
     report_data: Dict[str, Any],
     buy_reason_map: Optional[Dict[str, str]] = None,
+    kpi_score_map: Optional[Dict[str, Dict[str, int]]] = None,
 ) -> Dict[str, Any]:
     holding_path = _holding_csv_path_by_date(strategy, trade_mode, signal_date)
 
@@ -559,6 +592,7 @@ def _apply_backtest_to_holding(
         report_data=report_data,
         signal_date=signal_date,
         buy_reason_map=buy_reason_map,
+        kpi_score_map=kpi_score_map,
     )
 
     holding_df = pd.DataFrame(holding_rows, columns=HOLDING_HEADERS)
@@ -614,7 +648,7 @@ def update_stock_holding(
         if not signal_date:
             continue
 
-        signal_payload, signal_buy_reasons, signal_error = _load_signal_payload(
+        signal_payload, signal_buy_reasons, signal_kpi_scores, signal_error = _load_signal_payload(
             strategy=strategy,
             trade_mode=mode,
             signal_path=monthly_signal_path,
@@ -645,6 +679,7 @@ def update_stock_holding(
             signal_date=end_date,
             report_data=report_data,
             buy_reason_map=signal_buy_reasons,
+            kpi_score_map=signal_kpi_scores,
         )
         mode_results[mode] = apply_result
         updated_modes.append(mode)

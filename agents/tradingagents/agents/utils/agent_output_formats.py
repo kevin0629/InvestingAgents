@@ -78,15 +78,16 @@ class TechnicalOutput(BaseModel):
     technical_verification_reports: List[TechnicalVerificationReport] = Field(None, description="Technical analyst reflections for verification")
 
 
-class PortfolioDecision(BaseModel):
+class PortfolioReport(BaseModel):
     symbol: str = Field(description="The stock symbol related to this portfolio decision")
-    stock_type: Literal["growth", "value", "turnaround", "thematic"] = Field(description="The identified stock type based on the integrated analysis")
+    stock_type: Literal["growth", "value", "turnaround"] = Field(description="The identified stock type based on the integrated analysis")
     stock_type_classification_rationale: str = Field(description="The rationale behind classifying the stock into a specific type")
-    position: float = Field(description="The target position size for the given stock symbol, represented as a percentage of the total portfolio (e.g., 0.1 for 10%)")
-    confidence_score: int = Field(description="Confidence score for the trading action, ranging from 0 to 10")
-    rationale: str = Field(description="Detailed rationale behind the portfolio manager's trading decision for the given stock symbol")
+    growth_score: int = Field(description="Growth score for the stock, ranging from 0 to 10")
+    value_score: int = Field(description="Value score for the stock, ranging from 0 to 10")
+    turnaround_score: int = Field(description="Turnaround score for the stock, ranging from 0 to 10")
+    report: str = Field(description="The portfolio manager's final report for the given stock symbol")
 
-class PortfolioDecisions(BaseModel):
+class PortfolioReports(BaseModel):
     """Respond to the user with this"""
-    portfolio_decisions: List[PortfolioDecision] = Field(None, description="The portfolio manager's final trading decisions for the next trading day")
+    portfolio_reports: List[PortfolioReport] = Field(None, description="The portfolio manager's final reports")
 

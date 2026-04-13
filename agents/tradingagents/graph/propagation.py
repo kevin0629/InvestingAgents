@@ -38,7 +38,7 @@ class Propagator:
             "news_verification_reports": [],
             "critic_reflections": [],
 
-            "portfolio_decisions": [],
+            "portfolio_reports": [],
 
             # Backward-compatible legacy fields
             "user_request": user_request,
