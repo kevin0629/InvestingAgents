@@ -1,3 +1,7 @@
+## LangGraph
+1. 要定時清 .langgraph_api 的內容，不然會很卡!!!
+   > 建議執行一次刪一次
+
 ## Qdrant 使用方法
 1. 自 github 上 clone 下來 `git clone https://github.com/qdrant/qdrant.git`
 2. 使用 CMD 或 powershell 到 clone 下來的目錄位置，執行以下指令: 
@@ -9,6 +13,13 @@
 1. 自 github 上 clone 下來
 2. 將 `LANGFUSE_S3_BATCH_EXPORT_ENABLED` 改為 `true`，這一步務必要做才能匯出
 3. 使用 CMD 或 powershell 到 clone 下來的目錄位置，執行 `docker compose up`
+4. 獲取資料方法
+   > `python get_langfuse_data.py --username "public_key" --password "private_key" --output langfuse_observations.json` <br>
+   但最多只能抓 100 筆...
+5. 定期備份 docker clickhouse 內容，traces、observations 都存在其中!
+   > `/var/lib/postgresql/data`
+     可以從 `http://127.0.0.1:8123/` 去看，帳號密碼都是 clickhouse
+     `select * from default.observations;` 為查詢語句
 
 
 ## 使用 Gemini Embedding API

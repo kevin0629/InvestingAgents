@@ -92,7 +92,7 @@ class GraphSetup:
         workflow.add_conditional_edges(
             "distributor",
             self._route_tasks,
-            ["macro_agent", "financial_agent", "technical_agent", "news_agent", "analysts_done"],
+            ["macro_agent", "financial_agent", "technical_agent", "news_agent"],
         )
 
         workflow.add_edge("macro_agent", "analysts_done")

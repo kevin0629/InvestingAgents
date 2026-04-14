@@ -25,7 +25,6 @@ from tradingagents.dataflows.interface import route_to_vendor
 def get_company_news(
     company_symbol: Annotated[str, "stock symbol of the company"],
     end_date: Annotated[str, "End date in yyyy-mm-dd format"] = None,
-    look_back_days: Annotated[Optional[int], "Number of days to look back for news; None means no time limit"] = None,
 ) -> str:
     """
     Retrieve company news for a given symbol symbol.
@@ -33,12 +32,11 @@ def get_company_news(
     Args:
         company_symbol (str): Stock symbol of the company, e.g. 2330, 2455, 3491
         end_date (str): End date for data retrieval, format YYYY-MM-DD
-        look_back_days (int): Number of days to look back for news; None means no time limit
     Returns:
         str: A formatted report containing company news
     """
     
-    return route_to_vendor("get_company_news", company_symbol, end_date, look_back_days)
+    return route_to_vendor("get_company_news", company_symbol, end_date)
 
 
 @tool
