@@ -178,15 +178,17 @@ def create_portfolio_manager(llm):
         tech_verify_selected = _filter_selected_verifications(state.get("technical_verification_reports"))
         news_verify_selected = _filter_selected_verifications(state.get("news_verification_reports"))
 
+        # Combine analysis and selected verification reports into one section per domain.
+        fin_combined_reports = [*fin_analysis, *fin_verify_selected]
+        tech_combined_reports = [*tech_analysis, *tech_verify_selected]
+        news_combined_reports = [*news_analysis, *news_verify_selected]
+
         macro_markdown = _report_to_markdown(macro_analysis) or "- 無資料"
         reports_markdown = "\n\n".join(
             [
-                _reports_to_markdown("財務分析", fin_analysis),
-                _reports_to_markdown("技術分析", tech_analysis),
-                _reports_to_markdown("新聞分析", news_analysis),
-                _reports_to_markdown("財務驗證分析(僅入選標的)", fin_verify_selected),
-                _reports_to_markdown("技術驗證分析(僅入選標的)", tech_verify_selected),
-                _reports_to_markdown("新聞驗證分析(僅入選標的)", news_verify_selected),
+                _reports_to_markdown("財務分析", fin_combined_reports),
+                _reports_to_markdown("技術分析", tech_combined_reports),
+                _reports_to_markdown("新聞分析", news_combined_reports),
             ]
         )
 
@@ -220,12 +222,13 @@ def create_portfolio_manager(llm):
                     "   - 協調裁決: 鑑於該股目前處於「投機股」屬性，我們暫時忽略估值過高問題，優先順勢操作，但設定嚴格停損\n"
                     "3. 依信心分數做決策\n"
                     "4. KPI 量化要求（必填）：每一檔股票都必須產出 growth_score / value_score / turnaround_score（0-10 整數），且分數需可由分析內容與裁決邏輯追溯。\n"
-                    "5. 兩階段下單流程（執行規則）：\n"
+                    "5. 研究與可交易範圍要求：分析報告與驗證報告中出現的股票皆必須研究，且皆可執行買進（Buy）決策，不可只研究分析報告股票。\n"
+                    "6. 兩階段下單流程（執行規則）：\n"
                     "- 說明：執行兩階段下單流程，每階段僅能執行一次以模擬真實交易環境；在任何下單前，請務必先評估所有股票標的，一定要做滿倉，不可剩餘任何部位。\n"
-                    "- 階段一（初始下單）：根據整合後的結論呼叫 `create_stock_holding`，此呼叫必須包含參數 `reflection`: false。此階段僅執行一次。\n"
-                    "- 階段二（取得反思並調整）：先呼叫 `retrieve_reflections`，查詢通用層級的反思（財務 / 技術 / 新聞 / 宏觀 / 產業），請不要查詢個股。將取得的反思整合進決策，若需新增或調整持倉，再次呼叫 `create_stock_holding`，此呼叫必須包含 `reflection`: true。此階段亦僅執行一次。\n"
-                    "6. 完成上述兩階段流程後，使用 PortfolioReports 工具輸出結構化結果。\n"
-                    "7. PortfolioReports 輸出覆蓋範圍要求：必須包含本次候選股票池中的所有個股，不可只輸出買進標的。"
+                    "- 階段一（初始下單）：根據整合後的結論呼叫 `create_stock_holding`，此呼叫必須包含參數 `reflection`: false。此階段僅執行一次，一定要做滿倉。\n"
+                    "- 階段二（取得反思並調整）：先呼叫 `retrieve_reflections`，`strategy`參數務必使用 {strategy}，查詢通用層級的反思（財務 / 技術 / 新聞 / 宏觀 / 產業），請不要查詢個股。將取得的反思整合進決策，若需新增或調整持倉，再次呼叫 `create_stock_holding`，此呼叫必須包含 `reflection`: true。此階段亦僅執行一次，一定要做滿倉。\n"
+                    "7. 完成上述兩階段流程後，使用 PortfolioReports 工具輸出結構化結果。\n"
+                    "8. PortfolioReports 輸出覆蓋範圍要求：必須包含本次候選股票池中的所有個股，以及驗證報告中出現的所有股票，不可只輸出買進標的。"
                 ),
                 MessagesPlaceholder(variable_name="messages"),
             ]

@@ -62,7 +62,7 @@ def create_news_analyst(llm):
                     "絕對不得使用超過此日期的任何資料。\n\n"
                     "你可以使用下列工具: {tool_names}\n\n"
                     "任務指引: task_type 為 {task_type}."
-                    "若 task_type 是 ANALYSIS，代表這是新標的研究，使用 `get_company_news` 工具時，look_back_days 務必設定為 None。而若是 VERIFICATION 或 HYBRID，look_back_days 務必設定為 30。\n"
+                    "若 task_type 是 ANALYSIS，代表這是新標的研究。\n"
                     "若 task_type 為 VERIFICATION（庫存股）或 HYBRID（連續被選中），請驗證購買理由「{buy_reason}」是否符合預期並偵測盲點："
                     "若為 VERIFICATION，輸出 news_verification_reports，且 selected 必須為 false；若為 HYBRID，輸出 news_verification_reports，且 selected 必須為 true。\n\n"
                     "投資建議標準:\n"
