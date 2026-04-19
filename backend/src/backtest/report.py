@@ -477,23 +477,68 @@ class Report():
 
         return stats
 
-    def display_return_treemap(self):
+    def display_return_treemap(self, company_info=None):
         df = self.trades.copy()
         df["cum_return"] =  (1 + df['return']).groupby(df['stock_id']).cumprod() - 1
         df = df.groupby('stock_id').last()
         df = df.reset_index()
 
-        fig = px.treemap(df, path=['stock_id'], values='cum_return',
-                 title='Treemap of Cumulative Returns by Stock',
-                 color='cum_return', color_continuous_scale='RdBu_r',color_continuous_midpoint=0,
-                 custom_data=['stock_id', 'cum_return'],
-                 width=1600,
-                 height=800)
-        fig.update_traces(textposition='middle center',
-                        textfont_size=20,
-                        texttemplate="%{label}<br>cum_return = %{customdata[1]:.2f}",
-                        )
+        # fig = px.treemap(df, path=['stock_id'], values='cum_return',
+        #          title='Treemap of Cumulative Returns by Stock',
+        #          color='cum_return', color_continuous_scale='RdBu_r',color_continuous_midpoint=0,
+        #          custom_data=['stock_id', 'cum_return'],
+        #          width=1600,
+        #          height=800)
+        # fig.update_traces(textposition='middle center',
+        #                 textfont_size=20,
+        #                 texttemplate="%{label}<br>cum_return = %{customdata[1]:.2f}",
+        #                 )
 
+        # fig.show()
+        
+
+        company_info = company_info.copy() if isinstance(company_info, pd.DataFrame) else pd.DataFrame()
+
+        if not company_info.empty:
+            keep_cols = ['company_symbol', 'name', 'industry', 'subindustry']
+            company_info = company_info[keep_cols].copy()
+            df = df.merge(company_info, left_on='stock_id', right_on='company_symbol', how='left')
+            df = df.drop(columns=['company_symbol'], errors='ignore')
+
+        df['stock_label'] = np.where(
+            df['name'] == df['stock_id'],
+            df['stock_id'],
+            df['stock_id'] + ' ' + df['name']
+        )
+        df["size"] = df["cum_return"].abs().clip(lower=1e-6)
+        df['all'] = 'all'
+
+        fig = px.treemap(
+            df,
+            path=['all', 'industry', 'subindustry', 'stock_label'],
+            values='size',
+            title='Treemap of Cumulative Returns by Stock',
+            color='cum_return',
+            color_continuous_scale='RdBu_r',
+            color_continuous_midpoint=0,
+            custom_data=['stock_id', 'name', 'industry', 'subindustry', 'cum_return'],
+            width=1600,
+            height=800,
+        )
+        fig.update_traces(
+            textposition='middle center',
+            textfont_size=20,
+            texttemplate="%{label}<br>%{customdata[4]:.2%}",
+            hovertemplate="<br>".join([
+                "Industry: %{customdata[2]}",
+                "Subindustry: %{customdata[3]}",
+                "Stock ID: %{customdata[0]}",
+                "Stock Name: %{customdata[1]}",
+                "Cumulative Return: %{customdata[4]:.2%}",
+                "<extra></extra>",
+            ]),
+        )
+        # fig.update_layout(margin=dict(t=50, l=25, r=25, b=25))
         fig.show()
 
     def display_each_trade_histogram(self, index = "return"):

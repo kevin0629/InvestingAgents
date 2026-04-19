@@ -3,7 +3,7 @@ import warnings
 import datetime
 import numpy as np
 import pandas as pd
-from typing import Union
+from typing import Union, Optional
 from pandas.tseries.offsets import DateOffset
 from pandas.tseries.frequencies import to_offset
 import plotly.graph_objs as go
@@ -83,6 +83,132 @@ def rebase(prices, value=100):
     if isinstance(prices, pd.DataFrame):
         return prices.div(prices.iloc[0], axis=1) * value
     return prices / prices.iloc[0] * value
+
+
+def _get_market_close_series(data: Data) -> pd.Series:
+    """Load adjusted TAIEX close series (fallback to TAIEX close)."""
+    market_df = data.get('adjustedtaiex:close')
+
+    if isinstance(market_df, pd.Series):
+        market_series = market_df
+    elif 'close' in market_df.columns:
+        market_series = market_df['close']
+
+    market_series = market_series.dropna().copy()
+    market_series.index = pd.to_datetime(market_series.index, errors='coerce')
+    market_series = market_series[~market_series.index.isna()].sort_index()
+
+    return market_series
+
+
+def _get_next_trading_value(series: pd.Series, signal_date: Union[str, pd.Timestamp]) -> tuple:
+    """Get the first trading day/value strictly after signal_date."""
+    clean_series = series.dropna().copy()
+
+    clean_series.index = pd.to_datetime(clean_series.index, errors='coerce')
+    clean_series = clean_series[~clean_series.index.isna()].sort_index()
+
+    signal_dt = pd.to_datetime(signal_date)
+    target_index = clean_series.index.searchsorted(signal_dt, side='right')
+    if target_index >= len(clean_series.index):
+        raise ValueError(f'signal_date={signal_date} 後無可用交易日')
+
+    trade_dt = clean_series.index[target_index]
+    trade_price = float(clean_series.iloc[target_index])
+    return trade_dt, trade_price
+
+
+def _year_frac(start: pd.Timestamp, end: pd.Timestamp) -> float:
+    if start > end:
+        raise ValueError('start cannot be larger than end')
+    return (end - start).total_seconds() / 31557600
+
+
+def _calc_drawdown(price_series: pd.Series) -> pd.Series:
+    drawdown = price_series.copy()
+    drawdown[np.isnan(drawdown)] = -np.inf
+    roll_max = np.maximum.accumulate(drawdown)
+    return drawdown / roll_max - 1.0
+
+
+def _calc_sharpe_from_prices(price_series: pd.Series, nperiods: int = 252) -> float:
+    daily_returns = price_series.pct_change().dropna()
+    if len(daily_returns) < 2:
+        return 0.0
+
+    std = float(np.std(daily_returns, ddof=1))
+    if std <= 0:
+        return 0.0
+
+    sharpe_ratio = float(daily_returns.mean()) / std * np.sqrt(nperiods)
+    return round(sharpe_ratio, 2)
+
+
+def calc_adjusted_taiex_interval_metrics(entry_sig_date: Union[str, pd.Timestamp],
+                                         exit_sig_date: Union[str, pd.Timestamp],
+                                         data: Optional[Data] = None) -> dict:
+    """
+    計算指定區間的 adjusted_taiex 年化報酬、最大回撤(MDD)、Sharpe。
+
+    Args:
+        entry_sig_date: 訊號進場日期，會取其後第一個交易日。
+        exit_sig_date: 訊號出場日期，會取其後第一個交易日。
+        data: 可選 Data 實例；未提供時自動建立。
+
+    Returns:
+        dict: {
+            'entry_sig_date': str,
+            'exit_sig_date': str,
+            'entry_trade_date': str,
+            'exit_trade_date': str,
+            'annualized_return': float,
+            'mdd': float,
+            'sharpe': float,
+            'annualized_return_pct': str,
+            'mdd_pct': str
+        }
+    """
+    if entry_sig_date is None:
+        raise ValueError('entry_sig_date 不可為空')
+    if exit_sig_date is None:
+        raise ValueError('exit_sig_date 不可為空')
+
+    entry_dt = pd.to_datetime(entry_sig_date)
+    exit_dt = pd.to_datetime(exit_sig_date)
+    if exit_dt <= entry_dt:
+        raise ValueError('exit_sig_date 必須晚於 entry_sig_date')
+
+    data = data if isinstance(data, Data) else Data()
+    market_series = _get_market_close_series(data)
+
+    entry_trade_dt, _ = _get_next_trading_value(market_series, entry_sig_date)
+    exit_trade_dt, _ = _get_next_trading_value(market_series, exit_sig_date)
+
+    period_prices = market_series.loc[(market_series.index >= entry_trade_dt) &
+                                      (market_series.index <= exit_trade_dt)]
+    if len(period_prices) < 2:
+        raise ValueError('指定區間交易日不足，無法計算績效指標')
+
+    start_price = float(period_prices.iloc[0])
+    end_price = float(period_prices.iloc[-1])
+    if start_price == 0:
+        raise ValueError('區間起始價格不可為 0')
+
+    yf = _year_frac(period_prices.index[0], period_prices.index[-1])
+    if yf <= 0:
+        raise ValueError('指定區間長度無效，無法計算年化報酬')
+
+    annualized_return = (end_price / start_price) ** (1 / yf) - 1
+    mdd = float(_calc_drawdown(period_prices).min())
+    sharpe = _calc_sharpe_from_prices(period_prices, nperiods=252)
+
+    return {
+        'entry_trade_date': entry_trade_dt.strftime('%Y-%m-%d'),
+        'exit_trade_date': exit_trade_dt.strftime('%Y-%m-%d'),
+        'annualized_return': f"{round(annualized_return, 4)*100:.2f}%",
+        'mdd': f"{round(mdd, 4)*100:.2f}%",
+        'sharpe': f"{round(sharpe, 2)}",
+    }
 
 def sim(position: Union[pd.DataFrame, pd.Series],
         resample:Union[str, None]=None, resample_offset:Union[str, None] = None,
