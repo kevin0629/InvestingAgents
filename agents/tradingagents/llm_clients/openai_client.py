@@ -22,6 +22,7 @@ class NormalizedChatOpenAI(ChatOpenAI):
 _PASSTHROUGH_KWARGS = (
     "timeout", "max_retries", "reasoning",
     "api_key", "callbacks", "http_client", "http_async_client",
+    "disable_streaming",
 )
 
 # Provider base URLs and API key env vars
@@ -77,6 +78,9 @@ class OpenAIClient(BaseLLMClient):
         # all model families. Third-party providers use Chat Completions.
         if self.provider == "openai":
             llm_kwargs["use_responses_api"] = True
+            # Work around upstream chunk conversion issues in token-streaming
+            # when tool calling is enabled with Responses API.
+            llm_kwargs.setdefault("disable_streaming", "tool_calling")
 
         return NormalizedChatOpenAI(**llm_kwargs)
 

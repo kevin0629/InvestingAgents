@@ -4,6 +4,7 @@ import plotly.express as px
 from pathlib import Path
 import plotly.graph_objs as go
 import matplotlib.pyplot as plt
+from typing import Mapping, Sequence
 
 class Report():
     def __init__(self, stock_data, position, data) -> None:
@@ -668,6 +669,176 @@ class Report():
         plt.ylabel(index)
         plt.grid(True)
         plt.show()
+
+
+def create_multi_strategy_performance_figure(
+    reports,
+    rolling_window=20,
+    include_benchmark=False,
+    width=1000,
+    height=750,
+):
+    """建立多策略比較圖，包含 cum returns、drawdown、rolling return。
+
+    Args:
+        reports (dict[str, Report] | list[Report]):
+            多個 backtest.sim 回傳的 report 物件。
+            若為 list/tuple，會自動命名為 strategy_1、strategy_2 ...。
+        rolling_window (int): rolling return 視窗，預設 20 (約 1 個交易月)。
+        include_benchmark (bool): 是否額外繪製 benchmark (取第一個 report 的 benchmark)。
+        width (int): 圖寬。
+        height (int): 圖高。
+
+    Returns:
+        plotly.graph_objects.Figure
+    """
+
+    from plotly.subplots import make_subplots
+
+    if isinstance(reports, Mapping):
+        report_items = list(reports.items())
+    elif isinstance(reports, Sequence):
+        report_items = [(f"strategy_{idx}", rpt) for idx, rpt in enumerate(reports, start=1)]
+    else:
+        raise TypeError("reports 必須是 dict 或 list/tuple，內容為 backtest.sim 回傳物件")
+
+    if len(report_items) == 0:
+        raise ValueError("reports 不可為空")
+
+    def diff(series, period):
+        return series / series.shift(period) - 1
+
+    def calc_dd(series):
+        s = series.copy().ffill()
+        s[np.isnan(s)] = -np.Inf
+        roll_max = np.maximum.accumulate(s)
+        return s / roll_max - 1.0
+
+    fig = go.Figure(
+        make_subplots(
+            rows=3,
+            cols=1,
+            shared_xaxes=True,
+            row_heights=[2, 1, 1],
+            subplot_titles=(
+                "Cumulative Return",
+                "Drawdown",
+                f"Month Rolling Return",
+            ),
+        )
+    )
+
+    for strategy_name, rpt in report_items:
+        if not hasattr(rpt, "stock_data"):
+            raise TypeError(f"{strategy_name} 並非有效的 report 物件 (缺少 stock_data)")
+
+        perf = rpt.stock_data.copy()
+        if "cum_returns" not in perf.columns or "portfolio_returns" not in perf.columns:
+            raise ValueError(
+                f"{strategy_name} 的 stock_data 缺少必要欄位 (cum_returns / portfolio_returns)"
+            )
+
+        cum_ret = perf["cum_returns"] - 1
+        drawdown = calc_dd(perf["portfolio_returns"])
+        rolling_ret = diff(perf["portfolio_returns"], rolling_window)
+
+        fig.add_scatter(
+            x=cum_ret.index,
+            y=cum_ret,
+            mode="lines",
+            name=strategy_name,
+            legendgroup=strategy_name,
+            row=1,
+            col=1,
+        )
+        fig.add_scatter(
+            x=drawdown.index,
+            y=drawdown,
+            mode="lines",
+            name=f"{strategy_name} - drawdown",
+            legendgroup=strategy_name,
+            showlegend=False,
+            row=2,
+            col=1,
+        )
+        fig.add_scatter(
+            x=rolling_ret.index,
+            y=rolling_ret,
+            mode="lines",
+            name=f"{strategy_name} - rolling",
+            legendgroup=strategy_name,
+            showlegend=False,
+            row=3,
+            col=1,
+        )
+
+    if include_benchmark:
+        first_report = report_items[0][1]
+        if hasattr(first_report, "daily_benchmark"):
+            benchmark_close = first_report.daily_benchmark["close"]
+            benchmark_cum = benchmark_close / 100 - 1
+            benchmark_dd = calc_dd(benchmark_close)
+            benchmark_rolling = diff(benchmark_close, rolling_window)
+
+            fig.add_scatter(
+                x=benchmark_cum.index,
+                y=benchmark_cum,
+                mode="lines",
+                name="benchmark",
+                line={"color": "gray", "dash": "dot"},
+                row=1,
+                col=1,
+            )
+            fig.add_scatter(
+                x=benchmark_dd.index,
+                y=benchmark_dd,
+                mode="lines",
+                name="benchmark - drawdown",
+                line={"color": "gray", "dash": "dot"},
+                showlegend=False,
+                row=2,
+                col=1,
+            )
+            fig.add_scatter(
+                x=benchmark_rolling.index,
+                y=benchmark_rolling,
+                mode="lines",
+                name="benchmark - rolling",
+                line={"color": "gray", "dash": "dot"},
+                showlegend=False,
+                row=3,
+                col=1,
+            )
+
+    fig.update_layout(
+        template="plotly_white",
+        legend={"bgcolor": "rgba(0,0,0,0)"},
+        margin=dict(l=60, r=20, t=70, b=20),
+        height=height,
+        width=width,
+        xaxis3=dict(
+            rangeselector=dict(
+                buttons=list(
+                    [
+                        dict(count=1, label="1m", step="month", stepmode="backward"),
+                        dict(count=6, label="6m", step="month", stepmode="backward"),
+                        dict(count=1, label="YTD", step="year", stepmode="todate"),
+                        dict(count=1, label="1y", step="year", stepmode="backward"),
+                        dict(step="all"),
+                    ]
+                ),
+                x=0,
+                y=1,
+            ),
+            rangeslider={"visible": True, "thickness": 0.1},
+            type="date",
+        ),
+        yaxis={"tickformat": ",.0%"},
+        yaxis2={"tickformat": ",.0%"},
+        yaxis3={"tickformat": ",.0%"},
+    )
+
+    return fig
 
 
 # 用來安全進行除法的函數。如果分母 d 不等於零，則返回 n / d，否則返回 0。

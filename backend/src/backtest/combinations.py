@@ -1,7 +1,7 @@
 from itertools import combinations
 import pandas as pd
 from src.backtest.backtest import sim
-from src.backtest.report import Report
+from src.backtest.report import Report, create_multi_strategy_performance_figure
 from src.dataframe import CustomDataFrame
 from tqdm import tqdm
 
@@ -64,6 +64,26 @@ class ReportCollection:
         fig.update_layout(title={'text': 'Cumulative returns', 'x': 0.49, 'y': 0.9, 'xanchor': 'center',
                                     'yanchor': 'top'})
         return fig
+
+    def plot_performance_details(self, rolling_window=20, include_benchmark=False, width=1000, height=750):
+        """繪製多策略比較圖（cum returns / drawdown / rolling return）。
+
+        Args:
+          rolling_window (int): rolling return 視窗，預設 20。
+          include_benchmark (bool): 是否繪製 benchmark（取第一個 report 的 benchmark）。
+          width (int): 圖寬。
+          height (int): 圖高。
+
+        Returns:
+          (plotly.graph_objects.Figure): 多子圖比較圖。
+        """
+        return create_multi_strategy_performance_figure(
+            self.reports,
+            rolling_window=rolling_window,
+            include_benchmark=include_benchmark,
+            width=width,
+            height=height,
+        )
     
     def get_stats(self):
         """取得策略指標比較表
