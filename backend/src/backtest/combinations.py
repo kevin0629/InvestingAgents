@@ -65,7 +65,7 @@ class ReportCollection:
                                     'yanchor': 'top'})
         return fig
 
-    def plot_performance_details(self, rolling_window=20, include_benchmark=False, width=1000, height=750):
+    def plot_performance_details(self, include_benchmark=False, width=1000, height=750):
         """繪製多策略比較圖（cum returns / drawdown / rolling return）。
 
         Args:
@@ -79,7 +79,6 @@ class ReportCollection:
         """
         return create_multi_strategy_performance_figure(
             self.reports,
-            rolling_window=rolling_window,
             include_benchmark=include_benchmark,
             width=width,
             height=height,

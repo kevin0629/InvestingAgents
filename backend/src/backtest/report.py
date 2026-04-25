@@ -673,18 +673,17 @@ class Report():
 
 def create_multi_strategy_performance_figure(
     reports,
-    rolling_window=20,
     include_benchmark=False,
     width=1000,
     height=750,
 ):
-    """建立多策略比較圖，包含 cum returns、drawdown、rolling return。
+    """建立多策略比較圖，包含 cum returns、drawdown、period return。
 
     Args:
         reports (dict[str, Report] | list[Report]):
             多個 backtest.sim 回傳的 report 物件。
             若為 list/tuple，會自動命名為 strategy_1、strategy_2 ...。
-        rolling_window (int): rolling return 視窗，預設 20 (約 1 個交易月)。
+        rolling_window (int): 保留相容性的參數，當前版本未使用。
         include_benchmark (bool): 是否額外繪製 benchmark (取第一個 report 的 benchmark)。
         width (int): 圖寬。
         height (int): 圖高。
@@ -705,30 +704,75 @@ def create_multi_strategy_performance_figure(
     if len(report_items) == 0:
         raise ValueError("reports 不可為空")
 
-    def diff(series, period):
-        return series / series.shift(period) - 1
-
     def calc_dd(series):
         s = series.copy().ffill()
         s[np.isnan(s)] = -np.Inf
         roll_max = np.maximum.accumulate(s)
         return s / roll_max - 1.0
 
+    def map_signal_to_next_trading_days(signal_dates, trading_index):
+        """將訊號日映射為其後第一個有盤交易日（strictly after）。"""
+        signals = pd.DatetimeIndex(pd.to_datetime(signal_dates)).drop_duplicates().sort_values()
+        trades = pd.DatetimeIndex(pd.to_datetime(trading_index)).drop_duplicates().sort_values()
+        mapped = []
+
+        for sig in signals:
+            pos = trades.searchsorted(sig, side="right")
+            if pos < len(trades):
+                mapped.append(trades[pos])
+
+        if len(mapped) == 0:
+            return pd.DatetimeIndex([])
+        return pd.DatetimeIndex(mapped).drop_duplicates().sort_values()
+
+    def calc_period_returns_from_signals(series, signal_dates):
+        """以訊號日後第一個交易日切分每一期，計算期報酬。"""
+        s = series.copy()
+        s.index = pd.to_datetime(s.index)
+        s = s.sort_index().dropna()
+        if len(s) == 0:
+            empty = pd.Series(dtype="float64")
+            return empty, pd.DatetimeIndex([]), pd.DatetimeIndex([])
+
+        period_trade_dates = map_signal_to_next_trading_days(signal_dates, s.index)
+        if len(period_trade_dates) < 2:
+            empty = pd.Series(dtype="float64")
+            return empty, pd.DatetimeIndex([]), pd.DatetimeIndex([])
+
+        starts = pd.DatetimeIndex(period_trade_dates[:-1])
+        ends = pd.DatetimeIndex(period_trade_dates[1:])
+        start_vals = s.reindex(starts).to_numpy(dtype="float64")
+        end_vals = s.reindex(ends).to_numpy(dtype="float64")
+
+        # 使用位置對齊避免 pandas 以索引對齊造成布林長度不一致
+        valid = np.isfinite(start_vals) & np.isfinite(end_vals) & (start_vals != 0)
+        starts = starts[valid]
+        ends = ends[valid]
+        if len(starts) == 0:
+            empty = pd.Series(dtype="float64")
+            return empty, pd.DatetimeIndex([]), pd.DatetimeIndex([])
+
+        period_returns = pd.Series((end_vals[valid] / start_vals[valid]) - 1.0, index=ends)
+        return period_returns, starts, ends
+
+    # 固定策略色盤，確保 legend 與所有子圖的 trace 顏色一致
+    colorway = px.colors.qualitative.Plotly
+
     fig = go.Figure(
         make_subplots(
             rows=3,
             cols=1,
-            shared_xaxes=True,
+            shared_xaxes=False,
             row_heights=[2, 1, 1],
             subplot_titles=(
                 "Cumulative Return",
                 "Drawdown",
-                f"Month Rolling Return",
+                "Period Return",
             ),
         )
     )
 
-    for strategy_name, rpt in report_items:
+    for idx, (strategy_name, rpt) in enumerate(report_items):
         if not hasattr(rpt, "stock_data"):
             raise TypeError(f"{strategy_name} 並非有效的 report 物件 (缺少 stock_data)")
 
@@ -738,9 +782,22 @@ def create_multi_strategy_performance_figure(
                 f"{strategy_name} 的 stock_data 缺少必要欄位 (cum_returns / portfolio_returns)"
             )
 
-        cum_ret = perf["cum_returns"] - 1
+        portfolio_curve = perf["portfolio_returns"].copy()
+        base_value = portfolio_curve.iloc[0]
+        if base_value == 0:
+            cum_ret = portfolio_curve * 0
+        else:
+            cum_ret = portfolio_curve / base_value - 1
         drawdown = calc_dd(perf["portfolio_returns"])
-        rolling_ret = diff(perf["portfolio_returns"], rolling_window)
+        period_ret, period_starts, period_ends = calc_period_returns_from_signals(
+            portfolio_curve,
+            rpt.position.index,
+        )
+        period_labels = [f"M{i}" for i in range(1, len(period_ret) + 1)]
+        period_customdata = np.array(
+            [[s.strftime("%Y-%m-%d"), e.strftime("%Y-%m-%d")] for s, e in zip(period_starts, period_ends)]
+        ) if len(period_ret) else None
+        strategy_color = colorway[idx % len(colorway)]
 
         fig.add_scatter(
             x=cum_ret.index,
@@ -748,6 +805,7 @@ def create_multi_strategy_performance_figure(
             mode="lines",
             name=strategy_name,
             legendgroup=strategy_name,
+            line={"color": strategy_color},
             row=1,
             col=1,
         )
@@ -758,16 +816,25 @@ def create_multi_strategy_performance_figure(
             name=f"{strategy_name} - drawdown",
             legendgroup=strategy_name,
             showlegend=False,
+            line={"color": strategy_color},
             row=2,
             col=1,
         )
-        fig.add_scatter(
-            x=rolling_ret.index,
-            y=rolling_ret,
-            mode="lines",
-            name=f"{strategy_name} - rolling",
+        fig.add_bar(
+            x=period_labels,
+            y=period_ret.values,
+            name=f"{strategy_name} - period",
             legendgroup=strategy_name,
             showlegend=False,
+            marker={"color": strategy_color},
+            customdata=period_customdata,
+            hovertemplate="<br>".join([
+                "Period: %{x}",
+                "Start: %{customdata[0]}",
+                "End: %{customdata[1]}",
+                "Return: %{y:.2%}",
+                "<extra></extra>",
+            ]),
             row=3,
             col=1,
         )
@@ -776,9 +843,17 @@ def create_multi_strategy_performance_figure(
         first_report = report_items[0][1]
         if hasattr(first_report, "daily_benchmark"):
             benchmark_close = first_report.daily_benchmark["close"]
-            benchmark_cum = benchmark_close / 100 - 1
+            benchmark_base = benchmark_close.iloc[0]
+            benchmark_cum = benchmark_close / benchmark_base - 1 if benchmark_base != 0 else benchmark_close * 0
             benchmark_dd = calc_dd(benchmark_close)
-            benchmark_rolling = diff(benchmark_close, rolling_window)
+            benchmark_period, benchmark_starts, benchmark_ends = calc_period_returns_from_signals(
+                benchmark_close,
+                first_report.position.index,
+            )
+            benchmark_labels = [f"M{i}" for i in range(1, len(benchmark_period) + 1)]
+            benchmark_customdata = np.array(
+                [[s.strftime("%Y-%m-%d"), e.strftime("%Y-%m-%d")] for s, e in zip(benchmark_starts, benchmark_ends)]
+            ) if len(benchmark_period) else None
 
             fig.add_scatter(
                 x=benchmark_cum.index,
@@ -799,40 +874,43 @@ def create_multi_strategy_performance_figure(
                 row=2,
                 col=1,
             )
-            fig.add_scatter(
-                x=benchmark_rolling.index,
-                y=benchmark_rolling,
-                mode="lines",
-                name="benchmark - rolling",
-                line={"color": "gray", "dash": "dot"},
+            fig.add_bar(
+                x=benchmark_labels,
+                y=benchmark_period.values,
+                name="benchmark - period",
+                marker={"color": "gray"},
                 showlegend=False,
+                customdata=benchmark_customdata,
+                hovertemplate="<br>".join([
+                    "Period: %{x}",
+                    "Start: %{customdata[0]}",
+                    "End: %{customdata[1]}",
+                    "Return: %{y:.2%}",
+                    "<extra></extra>",
+                ]),
                 row=3,
                 col=1,
             )
 
+    fig.add_hline(
+        y=0,
+        line_width=1,
+        line_dash="dash",
+        line_color="black",
+        row=3,
+        col=1,
+    )
+
     fig.update_layout(
         template="plotly_white",
         legend={"bgcolor": "rgba(0,0,0,0)"},
+        barmode="group",
         margin=dict(l=60, r=20, t=70, b=20),
         height=height,
         width=width,
-        xaxis3=dict(
-            rangeselector=dict(
-                buttons=list(
-                    [
-                        dict(count=1, label="1m", step="month", stepmode="backward"),
-                        dict(count=6, label="6m", step="month", stepmode="backward"),
-                        dict(count=1, label="YTD", step="year", stepmode="todate"),
-                        dict(count=1, label="1y", step="year", stepmode="backward"),
-                        dict(step="all"),
-                    ]
-                ),
-                x=0,
-                y=1,
-            ),
-            rangeslider={"visible": True, "thickness": 0.1},
-            type="date",
-        ),
+        xaxis={"showticklabels": False},
+        xaxis2={"showticklabels": False},
+        xaxis3={"type": "category", "title": "Period (M1~MX)"},
         yaxis={"tickformat": ",.0%"},
         yaxis2={"tickformat": ",.0%"},
         yaxis3={"tickformat": ",.0%"},
