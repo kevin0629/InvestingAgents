@@ -111,6 +111,7 @@ def create_critic(llm):
                 _reports_to_markdown("財務驗證報告", state.get("financial_verification_reports")),
                 _reports_to_markdown("技術驗證報告", state.get("technical_verification_reports")),
                 _reports_to_markdown("新聞驗證報告", state.get("news_verification_reports")),
+                _reports_to_markdown("宏觀分析報告", state.get("macro_analysis_report")),
             ]
         )
 
