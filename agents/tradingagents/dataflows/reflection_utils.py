@@ -5,8 +5,6 @@ from typing import Optional, Dict, Any, List, Union
 from datetime import datetime, date
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
-    Distance,
-    VectorParams,
     PointStruct,
     Filter,
     FieldCondition,

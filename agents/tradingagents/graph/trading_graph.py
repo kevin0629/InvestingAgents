@@ -1,11 +1,7 @@
-import json
-from pathlib import Path
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from tradingagents.dataflows.config import set_config
 from tradingagents.default_config import DEFAULT_CONFIG
-from tradingagents.graph.propagation import Propagator
 from tradingagents.graph.setup import GraphSetup
 from tradingagents.llm_clients import create_llm_client
 
@@ -53,7 +49,6 @@ class TradingAgentsGraph:
             quick_thinking_llm=self.quick_thinking_llm,
             deep_thinking_llm=self.deep_thinking_llm,
         )
-        self.propagator = Propagator(max_recur_limit=self.config.get("max_recur_limit", 100))
 
         self.graph = self.graph_setup.setup_graph()
         self.curr_state = None
@@ -76,75 +71,3 @@ class TradingAgentsGraph:
                 }
                 kwargs["reasoning"] = reasoning
         return kwargs
-
-    # def propagate(self, user_request: str):
-    #     """Run the workflow and return final state + normalized decision."""
-    #     run_id = datetime.now().isoformat()
-    #     init_agent_state = self.propagator.create_initial_state(user_request=user_request)
-    #     args = self.propagator.get_graph_args(callbacks=self.callbacks if self.callbacks else None)
-
-    #     if self.debug:
-    #         trace = []
-    #         for chunk in self.graph.stream(init_agent_state, **args):
-    #             trace.append(chunk)
-    #             messages = chunk.get("messages", [])
-    #             if messages:
-    #                 last = messages[-1]
-    #                 tool_calls = getattr(last, "tool_calls", None)
-    #                 AgentExecutionLogger.log_event(
-    #                     run_id,
-    #                     "graph_chunk",
-    #                     "TradingAgentsGraph",
-    #                     {
-    #                         "message_type": last.__class__.__name__,
-    #                         "content": getattr(last, "content", None),
-    #                         "tool_calls": tool_calls,
-    #                     },
-    #                 )
-    #         final_state = trace[-1] if trace else self.graph.invoke(init_agent_state, **args)
-    #     else:
-    #         final_state = self.graph.invoke(init_agent_state, **args)
-
-    #     self.curr_state = final_state
-    #     AgentExecutionLogger.log_event(
-    #         run_id,
-    #         "graph_end",
-    #         "TradingAgentsGraph",
-    #         {
-    #             "final_trade_decision": final_state.get("final_trade_decision"),
-    #             "portfolio_decision": final_state.get("portfolio_decision"),
-    #         },
-    #     )
-    #     self._log_state(final_state)
-    #     return final_state, self.process_signal(final_state.get("final_trade_decision", ""))
-
-    # def _log_state(self, final_state: Dict[str, Any]):
-    #     end_date = final_state.get("end_date")
-    #     self.log_states_dict[str(end_date)] = {
-    #         "run_id": final_state.get("run_id"),
-    #         "company_of_interest": final_state.get("company_of_interest"),
-    #         "end_date": end_date,
-    #         "mode": final_state.get("mode"),
-    #         "strategy": final_state.get("strategy"),
-    #         "strategy_description": final_state.get("strategy_description"),
-    #         "backtest_report": final_state.get("backtest_report"),
-    #         "company_info_map": final_state.get("company_info_map"),
-    #         "market_regime": final_state.get("market_regime"),
-    #         "coordinator_plan": final_state.get("coordinator_plan"),
-    #         "financial_reports": final_state.get("financial_reports"),
-    #         "technical_reports": final_state.get("technical_reports"),
-    #         "news_reports": final_state.get("news_reports"),
-    #         "macro_analysis_report": final_state.get("macro_analysis_report"),
-    #         "critic_reflections": final_state.get("critic_reflections"),
-    #         "portfolio_decision": final_state.get("portfolio_decision"),
-    #         "final_trade_decision": final_state.get("final_trade_decision"),
-    #     }
-
-    #     directory = Path(f"eval_results/{self.ticker}/TradingAgentsStrategy_logs/")
-    #     directory.mkdir(parents=True, exist_ok=True)
-    #     with open(
-    #         f"eval_results/{self.ticker}/TradingAgentsStrategy_logs/full_states_log_{end_date}.json",
-    #         "w",
-    #         encoding="utf-8",
-    #     ) as file:
-    #         json.dump(self.log_states_dict, file, indent=2, ensure_ascii=False)

@@ -14,7 +14,7 @@ class GoogleEmbeddingClient(BaseEmbeddingClient):
     def get_embedding(self, text: str) -> List[float]:
         embedding_kwargs = {"model": self.model}
 
-        for key in ("google_api_key", "api_key", "task_type", "output_dimensionality"):
+        for key in ("output_dimensionality"):
             if key in self.kwargs:
                 embedding_kwargs[key] = self.kwargs[key]
 

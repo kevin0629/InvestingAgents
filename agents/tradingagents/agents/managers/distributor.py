@@ -1,6 +1,4 @@
-﻿"""Deterministic distributor subgraph (state-driven, non-LLM)."""
-
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from typing import Any, Dict, List
 
