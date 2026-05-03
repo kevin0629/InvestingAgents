@@ -542,6 +542,88 @@ class Report():
         # fig.update_layout(margin=dict(t=50, l=25, r=25, b=25))
         fig.show()
 
+    def display_stock_return_barplot(self, company_info=None, xtick_fontsize=None):
+        df = self.trades.copy()
+        df["cum_return"] = (1 + df['return']).groupby(df['stock_id']).cumprod() - 1
+        df = df.groupby('stock_id').last().reset_index()
+
+        company_info = company_info.copy() if isinstance(company_info, pd.DataFrame) else pd.DataFrame()
+        if not company_info.empty:
+            keep_cols = ['company_symbol', 'name']
+            company_info = company_info[keep_cols].copy()
+            df = df.merge(company_info, left_on='stock_id', right_on='company_symbol', how='left')
+            df = df.drop(columns=['company_symbol'], errors='ignore')
+
+        if 'name' not in df.columns:
+            df['name'] = df['stock_id']
+        else:
+            df['name'] = df['name'].fillna(df['stock_id'])
+
+        df['stock_label'] = np.where(
+            df['name'] == df['stock_id'],
+            df['stock_id'],
+            df['stock_id'] + ' ' + df['name']
+        )
+
+        df = df.sort_values('cum_return')
+
+        plt.rcParams['font.family'] = 'Microsoft JhengHei'
+        plt.rcParams['axes.unicode_minus'] = False
+
+        fig, ax = plt.subplots(figsize=(12, 6))
+        x_pos = np.arange(len(df))
+        ax.bar(x_pos, df['cum_return'] * 100, color='steelblue', edgecolor='black', align='center')
+
+        # choose fontsize automatically if not provided
+        if xtick_fontsize is None:
+            n = len(df)
+            if n <= 20:
+                fontsize = 10
+            elif n <= 40:
+                fontsize = 8
+            elif n <= 80:
+                fontsize = 7
+            else:
+                fontsize = 6
+        else:
+            fontsize = xtick_fontsize
+
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(df['stock_label'], rotation=45, ha='right', fontsize=fontsize)
+
+        ax.set_xlabel('Stock')
+        ax.set_ylabel('Return (%)')
+        ax.set_title('Cumulative Return by Stock')
+
+        fig.subplots_adjust(bottom=0.35)
+        plt.show()
+
+    def display_stock_return_histogram(self):
+        df = self.trades.copy()
+        df["cum_return"] = (1 + df['return']).groupby(df['stock_id']).cumprod() - 1
+        df = df.groupby('stock_id').last().reset_index()
+
+        data = (df['cum_return'] * 100).replace([np.inf, -np.inf], np.nan).dropna()
+        if len(data) == 0:
+            print("No valid data to plot histogram for cumulative returns")
+            return
+
+       
+        bin_edges = np.histogram_bin_edges(data, bins='auto')
+
+        if len(bin_edges) < 2:
+            bin_edges = np.linspace(data.min(), data.max(), 11)
+
+        plt.rcParams['font.family'] = 'Microsoft JhengHei'
+        plt.rcParams['axes.unicode_minus'] = False
+        plt.figure(figsize=(10, 6))
+        plt.hist(data, bins=bin_edges, color='steelblue', edgecolor='black')
+        plt.xlabel('Return (%)')
+        plt.ylabel('Stock Count')
+        plt.title('Histogram of Cumulative Returns by Stock')
+        plt.tight_layout()
+        plt.show()
+
     def display_each_trade_histogram(self, index = "return"):
         # index 有可能是:
         # position/period/return/mae/gmfe/bmfe/mdd/pdays
