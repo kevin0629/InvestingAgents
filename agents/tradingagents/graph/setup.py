@@ -1,15 +1,3 @@
-"""
-Graph assembly (test version).
-
-setup_graph(llm) ??compiled StateGraph
-
-Architecture:
-    distributor ?�?�(Send API)?�?�??macro_agent ?�??
-                                                    ?�?�??financial_agent ?�??
-                                                    ?�?�??technical_agent ?�?�?��???analysts_done ?�?�(has verification?)?�?�??critic ?�?�??portfolio_manager
-                                                    ?�?�??news_agent      ?�??                 ?�?�(no verification?)?�?�?�?�?�?�?�?�?�?�?�?�?�?�??portfolio_manager
-"""
-
 from typing import Literal
 
 from langchain_openai import ChatOpenAI

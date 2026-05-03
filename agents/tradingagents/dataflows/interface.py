@@ -1,6 +1,3 @@
-from typing import Annotated
-
-# Import from vendor-specific modules
 from .news_utils import get_company_news, get_macro_news
 from .stock_utils import get_stock_chart, get_taiex_chart
 from .fundamentals_utils import (

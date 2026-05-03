@@ -4,7 +4,6 @@ from typing import List, Literal, Optional
 class Task(BaseModel):
     symbol: str = Field(description="The stock symbol related to this task, must be integer string like '2330', '2455', '3491'")
     task_type: Literal["ANALYSIS", "VERIFICATION", "HYBRID"] = Field(None, description="Type of task")
-    # task: str = Field(description="Detailed description of the task")
     position: Optional[float] = Field(None, description="The target position size for the given stock symbol in previous period.")
     stock_return: Optional[str] = Field(None, description="The stock return for the previous period, used for VERIFICATION and HYBRID tasks to reflect on the accuracy of the previous recommendation")
     buy_reason: Optional[str] = Field(None, description="The reason for recommending a buy action, if task_type is VERIFICATION else None")
@@ -56,7 +55,6 @@ class MacroAnalysisReport(BaseModel):
     confidence_score: int = Field(description="Confidence score for the investment recommendation, ranging from 0 to 10")
     report: str = Field(description="Detailed macro analysis report")
 
-
 class TechnicalAnalysisReport(BaseModel):
     symbol: str = Field(description="The stock symbol related to this technical analysis report")
     signal: Literal["strong_buy", "buy", "neutral", "sell", "strong_sell"] = Field(description="Investment recommendation based on the technical analysis")
@@ -76,7 +74,6 @@ class TechnicalOutput(BaseModel):
     """Respond with analysis for ANALYSIS, verification for VERIFICATION, and both for HYBRID."""
     technical_analysis_reports: List[TechnicalAnalysisReport] = Field(None, description="Technical analyst outputs for analysis")
     technical_verification_reports: List[TechnicalVerificationReport] = Field(None, description="Technical analyst reflections for verification")
-
 
 class PortfolioReport(BaseModel):
     symbol: str = Field(description="The stock symbol related to this portfolio decision")
