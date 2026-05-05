@@ -14,7 +14,7 @@ class OpenAIEmbeddingClient(BaseEmbeddingClient):
     def get_embedding(self, text: str) -> List[float]:
         embedding_kwargs = {"model": self.model}
 
-        for key in ("dimensions"):
+        for key in ("openai_api_key", "max_retries", "dimensions"):
             if key in self.kwargs:
                 embedding_kwargs[key] = self.kwargs[key]
 

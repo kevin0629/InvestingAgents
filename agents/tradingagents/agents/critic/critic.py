@@ -1,9 +1,3 @@
-"""
-Critic subgraph (test version).
-
-create_critic(llm) 回傳一個已 compile 的 StateGraph subgraph。
-Critic 只接收 VerificationReport，彙整上期持股的驗證結果並提煉教訓。
-"""
 from langgraph.prebuilt import ToolNode
 from langgraph.graph import StateGraph, START, END
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -68,7 +62,14 @@ def create_critic(llm):
         return str(report)
 
     def _reports_to_markdown(title, reports):
-        rows = reports or []
+        if reports is None:
+            return f"### {title}\n- 無資料"
+
+        if isinstance(reports, dict):
+            rows = [reports]
+        else:
+            rows = reports or []
+
         if not rows:
             return f"### {title}\n- 無資料"
 
@@ -93,7 +94,7 @@ def create_critic(llm):
             buy_reason = str((row or {}).get("buy_reason") or "").strip()
             lines.append(
                 f"- {symbol}: position={position if position is not None else 'N/A'}, "
-                f"return={round(float(stock_return) * 100, 4) if stock_return else 'N/A'}%, buy_reason={buy_reason or 'N/A'}"
+                f"return={round(float(stock_return), 2) if stock_return else 'N/A'}%, buy_reason={buy_reason or 'N/A'}"
             )
 
         return "\n".join(lines) if lines else "- 無上一期持股資料"
@@ -121,6 +122,7 @@ def create_critic(llm):
                     "system",
                     "你是一位專業且嚴謹的投資決策事後檢討稽核員，負責對過去持倉進行歸因分析，找出投資決策成功或失敗的根本原因，並將結果轉化為可優化未來決策的具體規則。\n"
                     "過去持倉的投資決策是基於 {strategy} 策略篩出的股票，再由 Portfolio Manager 進一步選出較好的標的進行投資。\n"
+                    "目標：透過對過去持倉的嚴謹歸因與檢討，在嚴控下行風險下優先發掘並支持具備安全邊際與低估值的公司，將檢討結果轉化為可執行的價值導向決策規則，以期中長期穩定超越大盤及 {strategy} 原始績效。\n"
                     "你的分析將直接影響投資策略優化，因此必須確保邏輯一致、歸因準確，並避免後見之明偏誤。\n"
                     "交易規則：交易頻率為每月一次，每次都會做滿倉位。不執行分批建倉、減倉、停損或停利等交易管理設定。\n"
                     "你的核心目標是：\n"
@@ -135,10 +137,10 @@ def create_critic(llm):
                     "上一期 {strategy} 策略表現: {pre_strategy_performance}\n"
                     "上一期投資決策表現: {pre_performance}\n"
                     "上一期持股（供報酬歸因參考）:\n{previous_holdings_summary}\n"
-                    "Financial 、Technical、News Analyst 提供的驗證報告:\n"
+                    "Financial 、Technical、News Analyst、Macro Analyst 提供的驗證分析報告:\n"
                     "{reports_summary}\n"
                     "你可以使用的工具: {tool_names}\n, 在使用`store_reflections`之前務必使用`retrieve_reflections`回顧之前的檢討內容，避免重複內容存入。"
-                    "`store_reflections`只能依據 Financial 、Technical、News Analyst 提供的驗證報告才產生反思，不可以將你的胡思亂想內容胡亂存入，務必確保反思內容是有根據的、具體的、且能夠提煉出可執行的投資原則的。\n"
+                    "`store_reflections`只能依據 Financial 、Technical、News Analyst、Macro Analyst 提供的驗證分析報告才產生反思，不可以將你的胡思亂想內容胡亂存入，務必確保反思內容是有根據的、具體的、且能夠提煉出可執行的投資原則的。\n"
                     "所有工具呼叫的 end_date 參數皆必須設為 {end_date}，為本次資料分析截止日期，嚴禁使用截止日期以後的資料。\n\n"
                     "分析方法:\n"
                     "Step1: 事實核對\n"
