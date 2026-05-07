@@ -5,6 +5,7 @@ from pathlib import Path
 import plotly.graph_objs as go
 import matplotlib.pyplot as plt
 from typing import Mapping, Sequence
+import seaborn as sns
 
 class Report():
     def __init__(self, stock_data, position, data) -> None:
@@ -604,23 +605,15 @@ class Report():
         df = df.groupby('stock_id').last().reset_index()
 
         data = (df['cum_return'] * 100).replace([np.inf, -np.inf], np.nan).dropna()
+        
         if len(data) == 0:
             print("No valid data to plot histogram for cumulative returns")
             return
 
-       
-        bin_edges = np.histogram_bin_edges(data, bins='auto')
+        graph = sns.displot(data, kind="hist", kde=True)
+        graph.set_axis_labels("Return (%)", "Stock Count")
+        graph.figure.suptitle("Histogram of Cumulative Returns by Stock")
 
-        if len(bin_edges) < 2:
-            bin_edges = np.linspace(data.min(), data.max(), 11)
-
-        plt.rcParams['font.family'] = 'Microsoft JhengHei'
-        plt.rcParams['axes.unicode_minus'] = False
-        plt.figure(figsize=(10, 6))
-        plt.hist(data, bins=bin_edges, color='steelblue', edgecolor='black')
-        plt.xlabel('Return (%)')
-        plt.ylabel('Stock Count')
-        plt.title('Histogram of Cumulative Returns by Stock')
         plt.tight_layout()
         plt.show()
 

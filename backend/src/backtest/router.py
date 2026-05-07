@@ -23,7 +23,7 @@ async def get_backtest_report(
     """
     以指定的策略做回測，回傳策略績效報告、這一期持股、換股的清單
     
-    - **strategy_name**: 策略名稱 (monthly_revenue_growth_roe)
+    - **strategy_name**: 策略名稱 (monthly_revenue_growth_roe, monthly_revenue_growth_roe_pullback)
     - **start_date**: 回測開始日期，格式: YYYY-MM-DD，不提供則為資料最早日期
     - **end_date**: 回測結束日期，格式: YYYY-MM-DD，不提供則為今天
     

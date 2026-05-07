@@ -33,6 +33,19 @@ class BacktestService:
                 "roe_threshold": 0,
                 "top_n": 20
             }
+        },
+        "monthly_revenue_growth_roe_pullback": {
+            "name": "monthly_revenue_growth_roe_pullback",
+            "description": "穩健營收動能策略: 篩選營收成長>20%、負債比<70%、自由現金流>0、流動比率>100%、EPS>0、ROE>0%的股票，並選取ROE最高的20檔，做拉回買的動作",
+            "parameters": {
+                "mryoy_threshold": 20,
+                "dbr_threshold": 70,
+                "fcf_threshold": 0,
+                "cr_threshold": 100,
+                "eps_threshold": 0,
+                "roe_threshold": 0,
+                "top_n": 20
+            }
         }
     }
     
@@ -96,6 +109,8 @@ class BacktestService:
         # 根據策略名稱執行相應的策略
         if strategy_name == "monthly_revenue_growth_roe":
             strategy_signal = self._execute_monthly_revenue_growth_roe_strategy(strategy_params, start_date=start_date, end_date=end_date)
+        elif strategy_name == "monthly_revenue_growth_roe_pullback":
+            strategy_signal = self._execute_monthly_revenue_growth_roe_pullback_strategy(strategy_params, start_date=start_date, end_date=end_date)
         else:
             raise ValueError(f"策略 '{strategy_name}' 尚未實現")
         
@@ -164,6 +179,65 @@ class BacktestService:
         
         # 組合條件
         final_condition = basic_filter & mryoy_filter & price_filter
+        
+        # 選股: 在符合條件的股票中，選 ROE 最高的 top_n 檔
+        strategy_signal = roe[final_condition].is_largest(top_n)
+
+        strategy_signal.index = pd.to_datetime(strategy_signal.index)
+
+        # start_date 處理
+        if start_date:
+            strategy_signal = strategy_signal[strategy_signal.index >= pd.to_datetime(start_date)]
+
+        # end_date 處理
+        if end_date:
+            strategy_signal = strategy_signal[strategy_signal.index <= pd.to_datetime(end_date)]
+        
+        # 選擇每月 10 號的信號
+        strategy_signal_monthly = self._select_monthly_10(strategy_signal)
+        
+        return strategy_signal_monthly
+    
+    def _execute_monthly_revenue_growth_roe_pullback_strategy(self, parameters: Dict[str, Any], start_date: Optional[str] = None, end_date: Optional[str] = None) -> pd.DataFrame:
+        """
+        執行穩健營收動能策略（拉回買）
+
+        Args:
+            parameters: 策略參數
+            start_date: 開始日期
+            end_date: 結束日期
+        Returns:
+            策略信號 DataFrame
+        """
+        # 提取參數
+        mryoy_threshold = parameters.get("mryoy_threshold", 20)
+        dbr_threshold = parameters.get("dbr_threshold", 70)
+        fcf_threshold = parameters.get("fcf_threshold", 0)
+        cr_threshold = parameters.get("cr_threshold", 100)
+        eps_threshold = parameters.get("eps_threshold", 0)
+        roe_threshold = parameters.get("roe_threshold", 0)
+        top_n = parameters.get("top_n", 20)
+        
+        # 讀取資料
+        mryoy = self.data.get("report:mryoy")
+        roe = self.data.get("report:roe")
+        eps = self.data.get("report:eps")
+        dbr = self.data.get("report:dbr")
+        fcf = self.data.get("report:fcf")
+        cr = self.data.get("report:cr")
+        close = self.data.get("price:close")
+        
+        ma20 = self.data.indicator("SMA", timeperiod=20)
+        ma60 = self.data.indicator("SMA", timeperiod=60)
+
+        basic_filter = (dbr < dbr_threshold) & (fcf > fcf_threshold) & (cr > cr_threshold) & (eps > eps_threshold) & (roe > roe_threshold)
+        mryoy_filter = (mryoy > mryoy_threshold)
+        price_filter = close.notna()
+        daily_pullback = (close.shift(1) < ma20.shift(1)) & (close > ma20) & (close > close.shift(1))
+        recent_pullback = daily_pullback.rolling(window=10).max() > 0
+        trend_filter = (close > ma60) & (ma60.diff() > 0) & (close > ma20)
+
+        final_condition = basic_filter & recent_pullback & trend_filter & price_filter & mryoy_filter
         
         # 選股: 在符合條件的股票中，選 ROE 最高的 top_n 檔
         strategy_signal = roe[final_condition].is_largest(top_n)
