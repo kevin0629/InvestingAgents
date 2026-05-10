@@ -111,7 +111,14 @@ def _get_next_trading_value(series: pd.Series, signal_date: Union[str, pd.Timest
     signal_dt = pd.to_datetime(signal_date)
     target_index = clean_series.index.searchsorted(signal_dt, side='right')
     if target_index >= len(clean_series.index):
-        raise ValueError(f'signal_date={signal_date} 後無可用交易日')
+        # 若沒有 strictly after 的交易日，fallback 去找 <= signal_date 的最近交易日
+        prior_idx = clean_series.index[clean_series.index <= signal_dt]
+        if len(prior_idx) == 0:
+            raise ValueError(f'signal_date={signal_date} 後無可用交易日，且之前也無可用交易日')
+
+        trade_dt = prior_idx[-1]
+        trade_price = float(clean_series.loc[trade_dt])
+        return trade_dt, trade_price
 
     trade_dt = clean_series.index[target_index]
     trade_price = float(clean_series.iloc[target_index])

@@ -416,7 +416,14 @@ class BacktestService:
         signal_dt = pd.to_datetime(signal_date)
         target_index = clean_series.index.searchsorted(signal_dt, side="right")
         if target_index >= len(clean_series.index):
-            raise ValueError(f"signal_date={signal_date} 後無可用交易日")
+            # 若沒有 strictly after 的交易日，fallback 去找 <= signal_date 的最近交易日
+            prior_idx = clean_series.index[clean_series.index <= signal_dt]
+            if len(prior_idx) == 0:
+                raise ValueError(f'signal_date={signal_date} 後無可用交易日，且之前也無可用交易日')
+
+            trade_dt = prior_idx[-1]
+            trade_price = float(clean_series.loc[trade_dt])
+            return trade_dt.strftime("%Y-%m-%d"), trade_price
 
         trade_dt = clean_series.index[target_index]
         trade_price = float(clean_series.iloc[target_index])
@@ -612,13 +619,10 @@ class BacktestService:
     def _extract_current_holdings(self, report) -> List[HoldingInfo]:
         """從報告中提取當前持股"""
         holdings = []
+        print(report["exit_sig_date"])
 
         # 嘗試從報告中獲取最新持股資訊
-        for idx, row in report.iterrows():
-            exit_date = row.get('exit_date')
-            if pd.notna(exit_date):
-                continue
-
+        for idx, row in report[report['exit_sig_date'].isna()].iterrows():
             holdings.append(HoldingInfo(
                 stock_id=str(idx) if isinstance(idx, (str, int)) else "",
                 position=float(round(row.get('position'), 4)) if pd.notna(row.get('position')) else None,

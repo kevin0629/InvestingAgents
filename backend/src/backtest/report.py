@@ -590,7 +590,7 @@ class Report():
             fontsize = xtick_fontsize
 
         ax.set_xticks(x_pos)
-        ax.set_xticklabels(df['stock_label'], rotation=45, ha='right', fontsize=fontsize)
+        ax.set_xticklabels(df['stock_label'], rotation=90, ha='center', fontsize=fontsize)
 
         ax.set_xlabel('Stock')
         ax.set_ylabel('Return (%)')

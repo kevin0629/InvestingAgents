@@ -18,7 +18,7 @@ class StrategyListResponse(BaseModel):
 class HoldingInfo(BaseModel):
     """持股資訊"""
     stock_id: str = Field(..., description="股票代碼")
-    position: float = Field(..., description="權重")
+    position: Optional[float] = Field(None, description="權重")
     entry_sig_date: Optional[str] = Field(None, description="進場訊號日期")
 
 
@@ -58,9 +58,9 @@ class MarketReturnResponse(BaseModel):
     entry_sig_date: str = Field(..., description="進場訊號日期")
     exit_sig_date: str = Field(..., description="出場訊號日期")
     entry_trade_date: str = Field(..., description="進場實際交易日(訊號日後第一個交易日)")
-    exit_trade_date: str = Field(..., description="出場實際交易日(訊號日後第一個交易日)")
+    exit_trade_date: Optional[str] = Field(None, description="出場實際交易日(訊號日後第一個交易日)")
     entry_price: float = Field(..., description="進場價格")
-    exit_price: float = Field(..., description="出場價格")
+    exit_price: Optional[float] = Field(None, description="出場價格")
     market_return: str = Field(..., description="大盤報酬率")
     message: Optional[str] = Field(None, description="附加訊息")
 
