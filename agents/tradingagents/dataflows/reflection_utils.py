@@ -126,7 +126,7 @@ def _store_single_reflection(
     metadata: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Store one reflection record into Qdrant/JSONL fallback."""
-    collection_name = "reflections"
+    collection_name = "growth_growth"
     fallback_to_jsonl = True
 
     reflection_id = str(uuid.uuid4())
@@ -202,7 +202,7 @@ def retrieve_reflections(
     """
     limit = 2
     score_threshold = 0.7
-    collection_name = "reflections"
+    collection_name = "growth_growth"
     query_embedding = get_embedding(query_text)
 
 
