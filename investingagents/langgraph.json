@@ -1,0 +1,9 @@
+{
+  "dependencies": [
+    "."
+  ],
+  "graphs": {
+    "dev": "graph.langgraph_dev:build_graph"
+  },
+  "env": ".env"
+}

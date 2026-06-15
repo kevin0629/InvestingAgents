@@ -4,7 +4,6 @@ import pandas as pd
 import numpy as np
 from src.backtest.schemas import (
     StrategyInfo,
-    StrategyListResponse,
     HoldingInfo,
     PerformanceMetrics,
     BacktestReportResponse,
@@ -12,7 +11,6 @@ from src.backtest.schemas import (
     MarketReturnResponse,
 )
 from src.backtest import backtest
-from src.backtest.combinations import sim_conditions
 from src.dataframe import CustomDataFrame
 
 
@@ -23,7 +21,7 @@ class BacktestService:
     AVAILABLE_STRATEGIES = {
         "monthly_revenue_growth_roe": {
             "name": "monthly_revenue_growth_roe",
-            "description": "穩健營收動能策略: 篩選營收成長>24%、負債比<70%、自由現金流>0、流動比率>100%、EPS>0、ROE>0%的股票，並選取ROE最高的20檔",
+            "description": "穩健營收動能策略: 篩選營收成長>24%、負債比<70%、自由現金流>0、流動比率>100%、EPS>0、ROE>0%的股票，並選取ROE最高的2檔",
             "parameters": {
                 "mryoy_threshold": 24,
                 "dbr_threshold": 70,
@@ -31,7 +29,7 @@ class BacktestService:
                 "cr_threshold": 100,
                 "eps_threshold": 0,
                 "roe_threshold": 0,
-                "top_n": 20
+                "top_n": 2
             }
         },
         "monthly_revenue_growth_roe_pullback": {

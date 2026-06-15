@@ -3,7 +3,6 @@ import json
 from src.backtest.schemas import (
     BacktestReportResponse,
     StrategyListResponse,
-    StrategyInfo,
     BacktestSimResponse,
     MarketReturnResponse,
 )

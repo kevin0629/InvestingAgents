@@ -1,9 +1,0 @@
-{
-  "dependencies": [
-    "."
-  ],
-  "graphs": {
-    "dev": "tradingagents.graph.langgraph_dev:build_graph"
-  },
-  "env": ".env"
-}
