@@ -21,7 +21,7 @@ class BacktestService:
     AVAILABLE_STRATEGIES = {
         "monthly_revenue_growth_roe": {
             "name": "monthly_revenue_growth_roe",
-            "description": "穩健營收動能策略: 篩選營收成長>24%、負債比<70%、自由現金流>0、流動比率>100%、EPS>0、ROE>0%的股票，並選取ROE最高的2檔",
+            "description": "穩健營收動能策略: 篩選營收成長>24%、負債比<70%、自由現金流>0、流動比率>100%、EPS>0、ROE>0%的股票，並選取ROE最高的20檔",
             "parameters": {
                 "mryoy_threshold": 24,
                 "dbr_threshold": 70,
@@ -29,7 +29,7 @@ class BacktestService:
                 "cr_threshold": 100,
                 "eps_threshold": 0,
                 "roe_threshold": 0,
-                "top_n": 2
+                "top_n": 20
             }
         },
         "monthly_revenue_growth_roe_pullback": {
