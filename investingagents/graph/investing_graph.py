@@ -50,9 +50,8 @@ class InvestingAgentsGraph:
         )
 
         self.graph = self.graph_setup.setup_graph()
-        self.curr_state = None
-        self.ticker = None
-        self.log_states_dict = {}
+
+        
 
     def _get_provider_kwargs(self) -> Dict[str, Any]:
         kwargs = {}

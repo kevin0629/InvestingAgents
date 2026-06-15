@@ -7,5 +7,5 @@ def build_graph(config: Dict[str, Any] | None = None):
     merged = DEFAULT_CONFIG.copy()
     if config:
         merged.update(config)
-    graph = InvestingAgentsGraph(debug=True, config=merged)
+    graph = InvestingAgentsGraph(config=merged)
     return graph.graph
