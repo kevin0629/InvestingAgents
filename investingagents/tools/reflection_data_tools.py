@@ -14,7 +14,7 @@ from qdrant_client.models import (
 )
 from functools import lru_cache
 from .config import get_config
-from embedding_client import create_embedding_client
+from embedding_clients import create_embedding_client
 
 
 

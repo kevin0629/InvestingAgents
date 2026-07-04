@@ -1,18 +1,37 @@
-## 使用Anaconda
-- 可以參考: https://medium.com/python4u/anaconda%E4%BB%8B%E7%B4%B9%E5%8F%8A%E5%AE%89%E8%A3%9D%E6%95%99%E5%AD%B8-f7dae6454ab6
-- 建立一個自己的環境
-  - conda create --name [你想取的環境名稱] python=3.8
-  - activate [你剛取的環境名稱] 
-- 並匯入requirements.txt 的套件
-  - cd [requirements所在的根目錄]
-  - pip install –r requirements.txt
+## Prerequisite
+* 下載 [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/zh-hant/visual-cpp-build-tools/) 
+* 勾選以下套件並重新啟動電腦
+    1. MSVC v143 - VS 2022 C++ x64/x86 建置工具
+    2. Windows 11 SDK（視系統版本而定）
+    3. 適用於Windows C++ 的 CMake 工具 
+    4. 測試工具的核心功能 - 建置工具
+    5. C++ AddressSanitizer
+* 將`Microsoft C++ Build Tools`等相關設定新增到系統環境變數 [參考](https://github.com/bycloudai/InstallVSBuildToolsWindows)
+* 安裝 TA-LIB到TA-LIB資料夾中
+    1. [前往此網址]https://github.com/cgohlke/talib-build/releases
+    2. 安裝對應版本的whl檔到TA-LIB資料夾中 (假設是3.10版本就下載ta_lib-0.6.3-cp310-cp310-win_amd64.whl)
+    3. 更改專案資料夾中`requirement.txt`的內容，`TA-Lib @ file:///D:/<路徑>/TA-LIB/<檔案全名.whl>`
+* 安裝 Python 3.7 ~ 3.11版本(這是由於Ta-Lib、finlab library只有支援到這些版本，使用python3.12版finlab那邊會有問題)，強烈建議一起安裝python launcher
 
-## Python 版本
-- Talib 不支支援到最新的python3.11，目前改用python3.8(但目前沒用到Talib)
+## Installation
+建立虛擬環境並安裝requirement
+```
+py -<版本> -m venv .venv
+.venv\scripts\activate
+pip install -r requirements.txt
+```
 
-## 可能會用到基本語法
-主要分成以下四種:
-|            |存取raw data|dataframe操作|回測        |顯示report   |
-|:------------:|------------|------------|------------|------------|
-|功能描述|從資料庫中取得資料，包含股價(開、高、低、收)以及財務報表，並儲存成dataframe形式|針對儲存成dataframe形式之資料做處理|回測模擬股票部位所產生的淨值報酬率|策略回測基礎報告|
-|語法|1. 建立DB連線<br> data=Data()<br>2. 取得資料<br>data.get("你想取得的資料")|1. 取得移動平均<br>df.average(n_windows)<br>2. 買入訊號持續為True直到出場條件<br>df.hold_until(exits)<br>3. 根據因子要切割成幾群<br>df.divide_slice(quantile)|1. 回測一個position，並回傳一個report物件<br>report=backtest.sim(position, resample)<br>2. 回測多個position，並回傳一個report的dict結構<br>report_conditions=sim_conditions(conditions, resample)<br>註:conditoins是選股條件的集合，應為dict結構|1. 顯示單一position圖組<br>report.display()<br>2. 顯示CAGR、MDD、sharpe ratio等數據<br>report.get_status()<br>3. 顯示report_conditions累計回報比較<br>report_collection.plot_creturns().show()<br>4. 顯示report_conditions各種數據比較，有柱狀圖、熱力圖<br>柱狀圖:report_collection.plot_stats('bar').show()<br>熱力圖:report_collection.plot_stats('heatmap')|
+## Compile CPython Extension Modules
+1. Command Prompt執行以下指令
+    ```
+    cd core
+    python setup.py build_ext --inplace
+    ```
+2. 執行過後會出現以下檔案
+    ![執行後應該長這樣](./img/after_build_backtest_core.pyx.png)
+
+## Run
+使用下面的指令來運作：
+```
+uvicorn src.main:app --reload
+```

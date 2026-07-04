@@ -1,26 +1,53 @@
-## Qdrant 使用方法
-1. 自 github 上 clone 下來 `git clone https://github.com/qdrant/qdrant.git`
+## Prerequisite
+### Docker Desktop
+為了方便後續部屬相關應用，必須安裝 Docker Desktop，按[官方文件](https://docs.docker.com/desktop/setup/install/windows-install/)操作即可完成安裝步驟
+
+### Qdrant
+1. Clone Qdrant
+   ```
+   git clone https://github.com/qdrant/qdrant.git
+   ```
 2. 使用 CMD 或 powershell 到 clone 下來的目錄位置，執行以下指令: 
-   - `docker volume create qdrant_storage`
-   - `docker run -p 6333:6333 -p 6334:6334 -v qdrant_storage:/qdrant/storage qdrant/qdrant`
+   ```
+   docker volume create qdrant_storage
+   docker run -p 6333:6333 -p 6334:6334 -v qdrant_storage:/qdrant/storage qdrant/qdrant
+   ```
+
+### Langfuse
+1. Clone Langfuse
+2. 使用 CMD 或 powershell 到 clone 下來的目錄位置，執行以下指令: 
+   ```
+   docker compose up
+   ```
+
+## Installation
+創建虛擬環境:
+```
+uv venv --python 3.11
+.\.venv\Scripts\activate
+```
+
+安裝套件和相依項:
+```
+uv sync
+```
+
+## Setting Env
+1. 複製環境變數範例
+   ```
+   cp .env.example .env
+   ```
+2. 將會使用到的 LLM 或 Embedding 供應商的 Key 填入環境變數
+   > 如本實驗使用 OpenAI 作為 LLM 模型供應商，使用 Google 作為 Embedding 模型供應商，故要填入`OPENAI_API_KEY`、`GOOGLE_API_KEY`
+
+   > 使用 Google 作為 Embedding 模型的原因：免費，且每天用量已足夠做使用。支持每分鐘 **100** requests， 每分鐘 30K input tokens，每天 **1000** requests
+3. 填入 Langfuse 相關變數（`LANGFUSE_BASE_URL`、`LANGFUSE_SECRET_KEY`、`LANGFUSE_PUBLIC_KEY`）
+4. 填入 Qdrant 環境變數（`QDRANT_URL`）
+5. 填入 backent 環境變數（`BACKEND_API_URL`）
 
 
-## Langfuse 使用方法
-1. 自 github 上 clone 下來
-2. 將 `LANGFUSE_S3_BATCH_EXPORT_ENABLED` 改為 `true`，這一步務必要做才能匯出
-3. 使用 CMD 或 powershell 到 clone 下來的目錄位置，執行 `docker compose up`
-4. 獲取資料方法
-   > `python get_langfuse_data.py --username "public_key" --password "private_key" --output langfuse_observations.json` <br>
-   但最多只能抓 100 筆...
-5. 定期備份 docker clickhouse 內容，traces、observations 都存在其中!
-   > `/var/lib/postgresql/data`
-     可以從 `http://127.0.0.1:8123/` 去看，帳號密碼都是 clickhouse
-     `select * from default.observations;` 為查詢語句
-
-
-## 使用 Gemini Embedding API
-因為免費，且每天用量已足夠做研究使用
-> 支持每分鐘 **100** requests， 每分鐘 30K input tokens，每天 **1000** requests
-
-## Investingagents 使用方法
-1. 輸入策略以及截止日期，截止日期務必是進場訊號的日期!
+## Run
+使用下面的指令來運作：
+```
+langgraph dev
+```

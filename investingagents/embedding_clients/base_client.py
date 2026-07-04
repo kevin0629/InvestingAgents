@@ -10,7 +10,7 @@ class BaseEmbeddingClient(ABC):
         self.kwargs = kwargs
     
     @abstractmethod
-    async def get_embedding(self, text: str) -> List[float]:
+    def get_embedding(self, text: str) -> List[float]:
         """Return embedding vector for a single text input."""
         pass
 
