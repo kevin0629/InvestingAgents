@@ -91,6 +91,6 @@ langgraph dev
 
 ### tools/
 - `stock_data_tools.py`、`fundamental_data_tools.py`、`news_data_tools.py`：資料來源工具
-- `backtest_tools.py`、`trading_tools.py`：策略回測與交易執行工具
+- `backtest_tools.py`、`trading_tools.py`、`account_utils.py`：策略回測與交易執行工具
 - `reflection_data_tools.py`：反思與檢討流程用資料工具
-- `account_utils.py`、`utils.py`、`config.py`：工具層共用設定與輔助函式
+- `utils.py`、`config.py`：工具層共用設定與輔助函式
