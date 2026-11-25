@@ -10,7 +10,7 @@ class Config(BaseSettings):
                         database = "stock"
                     )
     
-    CORS_ORIGINS: list[str] = ["http://localhost", "http://127.0.0.1"]
+    CORS_ORIGINS: list[str] = ["http://localhost", "http://127.0.0.1", "http://localhost:4200", "http://127.0.0.1:4200"]
     CORS_CREDENTIALS: bool = True
     CORS_METHODS: list[str] = ["*"]
     CORS_HEADERS: list[str] = ["*"]

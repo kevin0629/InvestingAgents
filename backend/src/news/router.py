@@ -14,13 +14,17 @@ async def get_macro_news(
     service = NewsService()
     try:
         data = await service.get_macro_news(end_date, look_back_days, limit)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid end_date format")
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
-    if not data:
-        raise HTTPException(status_code=404, detail="Can not find the macro news")
-
-    return NewsListResponse(news_data=data)
+    return NewsListResponse(
+        news_data=data,
+        message="查不到新聞" if not data else None
+    )
 
 @router.get("/{company_symbol}", response_model=NewsListResponse)
 async def get_company_news(
@@ -35,7 +39,7 @@ async def get_company_news(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid end_date format")
 
-    if not data:
-        return NewsListResponse(news_data=[], message="查不到新聞")
-
-    return NewsListResponse(news_data=data)
+    return NewsListResponse(
+        news_data=data,
+        message="查不到新聞" if not data else None
+    )

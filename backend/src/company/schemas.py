@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 
 class CompanyResponse(BaseModel):
     """公司資訊回應"""
-    model_config = {"from_attributes": True}
+    # model_config = {"from_attributes": True}
     company_symbol: str = Field(..., description="股票代號")
     name: str = Field(..., description="公司名稱")
     industry: str = Field(..., description="產業")
@@ -16,4 +16,4 @@ class CompanyResponse(BaseModel):
 
 class CompanyListResponse(BaseModel):
     """公司資訊列表回應"""
-    companies_data: list[CompanyResponse] = Field(..., description="公司資訊資料列表")
+    data: list[CompanyResponse] = Field(..., description="公司資訊資料列表")

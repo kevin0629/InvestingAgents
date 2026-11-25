@@ -5,14 +5,17 @@ class CompanyService:
     def __init__(self, data_instance):
         self.data = data_instance
 
-    def get_all_companies(self):
+    def get_all_companies(self) -> List[dict]:
         data = self.data.get("company_info")
-        return list(data.to_dict(orient="records"))
+
+        return data.to_dict(orient="records")
 
 
-    def get_company_by_symbol(self, company_symbol: str):
+
+    def get_company_by_symbol(self, company_symbol: str) -> Optional[dict]:
         data = self.data.get("company_info")
         company_data = data[data["company_symbol"] == company_symbol]
         if company_data.empty:
             return None
+        
         return company_data.iloc[0].to_dict()

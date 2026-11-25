@@ -10,7 +10,7 @@ async def get_companys():
     service = CompanyService(get_data_instance())
     data = service.get_all_companies()
     
-    return CompanyListResponse(companies_data=data)
+    return CompanyListResponse(data=data)
     
 
 

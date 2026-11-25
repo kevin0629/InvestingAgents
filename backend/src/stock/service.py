@@ -9,19 +9,10 @@ import talib
 from datetime import datetime
 from src.format_data import get_each_company_daily_price, get_taiex_daily
 from src.stock.schemas import StockChartQueryParams
-from typing import Optional, List
 
 class StockService:
-    def __init__(self, data, company_symbol: str, end_date: Optional[str] = None):
-        """
-        Initialize StockService
-        :param data: Data instance from src.get_data
-        :param company_symbol: Stock symbol
-        :param end_date: Optional end date for data context
-        """
-        self.data = data
-        self.company_symbol = company_symbol
-        self.end_date = end_date
+    def __init__(self, data_instance):
+        self.data = data_instance
         self.colors  = {
         'MA5': '#1f77b4',
         'MA10': '#ff7f0e',
@@ -63,17 +54,73 @@ class StockService:
             char_width_approx = 0.0045
             x_pos += len(text) * char_width_approx
 
-    def get_stock_chart(self, params: StockChartQueryParams) -> io.BytesIO:
+
+    def process_stock_data(self, symbol: str, params: StockChartQueryParams, df: pd.DataFrame) -> pd.DataFrame:
+        if df.empty:
+            raise ValueError(f"No data found for {symbol}")
+        
+        # Ensure index is Datetime
+        df.index = pd.to_datetime(df.index)
+        df = df.sort_index()
+
+        if not params.end_date:
+            params.end_date = datetime.now().date()  # Default to today if not provided
+
+        df = df[df.index >= "2000-01-01"]  # Filter out any data before 2000-01-01
+        df = df[df.index <= pd.to_datetime(params.end_date)]  # Filter up to end_date
+        
+        if params.timeframe in ["W", "M"]:
+            try:
+                agg_logic = {
+                    'open': 'first',
+                    'high': 'max',
+                    'low': 'min',
+                    'close': 'last',
+                    'volume': 'sum'
+                }
+        
+                # Only use columns that exist
+                active_agg = {k: v for k, v in agg_logic.items() if k in df.columns}
+        
+                # Resample
+                df = df.resample(params.timeframe).agg(active_agg)
+        
+                # Drop empty bins
+                df = df.dropna(how='all')
+        
+            except Exception as e:
+                # Add debugging context to the error
+                error_msg = f"Resample failed. Shape: {df.shape}, Dtypes: {df.dtypes.to_dict()}. Error: {str(e)}"
+                raise RuntimeError(error_msg)
+            
+        return df
+
+
+
+    def get_taiex_data(self, params: StockChartQueryParams) -> pd.DataFrame:
+        df = get_taiex_daily(self.data.raw_taiex_data).copy()
+
+        return self.process_stock_data("TAIEX", params, df).reset_index().to_dict(orient="records")
+
+    
+
+
+    def get_stock_data(self, company_symbol: str, params: StockChartQueryParams) -> pd.DataFrame:
+        df = get_each_company_daily_price(self.data.raw_price_data, company_symbol).copy()
+    
+        return self.process_stock_data(company_symbol, params, df).reset_index().to_dict(orient="records")
+
+    
+
+    def get_stock_chart(self, company_symbol: str, params: StockChartQueryParams) -> io.BytesIO:
         """
         Generate stock chart using mplfinance
         """
-        timeframe = (params.timeframe or "D").upper()
-
         # 1. Get raw data (Full History)
-        df = get_each_company_daily_price(self.data.raw_price_data, self.company_symbol)
+        df = get_each_company_daily_price(self.data.raw_price_data, company_symbol)
         
         if df.empty:
-            raise ValueError(f"No data found for symbol {self.company_symbol}")
+            raise ValueError(f"No data found for symbol {company_symbol}")
 
         # Ensure index is Datetime
         df.index = pd.to_datetime(df.index)
@@ -82,36 +129,19 @@ class StockService:
         # Determine strict end date once and use it consistently.
         if params.end_date:
             display_end_ts = pd.to_datetime(params.end_date).normalize()
-        elif self.end_date:
-            display_end_ts = pd.to_datetime(self.end_date).normalize()
         else:
             display_end_ts = pd.Timestamp(datetime.now().date())
-        
-        # Ensure columns are numeric to avoid aggregation errors
-        temp_df = df.copy()
-        target_cols = ['open', 'high', 'low', 'close', 'volume']
-        valid_cols = [c for c in target_cols if c in temp_df.columns]
-        
-        # Keep only valid columns
-        temp_df = temp_df[valid_cols]
-        
-        # Strict numeric conversion
-        for col in valid_cols:
-            temp_df[col] = pd.to_numeric(temp_df[col], errors='coerce')
-            
-        # Drop rows where essential price data is missing
-        # We need at least Close to be present, but usually OHLC all needed
-        essential_cols = [c for c in ['open', 'high', 'low', 'close'] if c in valid_cols]
-        if essential_cols:
-            temp_df = temp_df.dropna(subset=essential_cols)
-        
-        if temp_df.empty:
-            raise ValueError(f"No valid numeric data found for symbol {self.company_symbol} after cleaning")
-            
-        # Final strict cast to float
-        df = temp_df.astype(float)
 
-        if timeframe in ["W", "M"]:
+        essential_cols = ['open', 'high', 'low', 'close', 'volume']
+
+        # Keep only valid columns
+        df = df[essential_cols].copy()
+        df = df.dropna(subset=essential_cols)
+        
+        if df.empty:
+            raise ValueError(f"No valid numeric data found for symbol {company_symbol} after cleaning")
+
+        if params.timeframe in ["W", "M"]:
             try:
                 agg_logic = {
                     'open': 'first',
@@ -124,7 +154,7 @@ class StockService:
                 active_agg = {k: v for k, v in agg_logic.items() if k in df.columns}
                 
                 # Resample
-                df = df.resample(timeframe).agg(active_agg)
+                df = df.resample(params.timeframe).agg(active_agg)
                 
                 # Filter out empty bins (where Close is NaN)
                 if 'close' in df.columns:
@@ -146,13 +176,7 @@ class StockService:
             "volume": "Volume"
         })
 
-        if "Close" not in df.columns:
-             raise ValueError("Data missing 'close' price column")
-
-        # 2. Calculate Indicators using TALib (On Full Data)
         close = df["Close"].values
-    
-        # Adjust indicator periods based on timeframe and data length
         data_len = len(close)
         
         try:
@@ -186,12 +210,10 @@ class StockService:
             error_msg = f"TALib calculation failed. Data length: {data_len}, Close dtype: {close.dtype}, Error: {str(e)}"
             raise RuntimeError(error_msg)
 
-        # 3. Filter Date Range for Display
+        # Filter Date Range for Display
         # For resampled data, include the bucket that contains end_date (e.g. week/month end label).
-        if timeframe in ["W", "M"]:
-            display_cutoff = display_end_ts.to_period(timeframe).end_time.normalize()
-        else:
-            display_cutoff = display_end_ts
+        if params.timeframe in ["W", "M"]:
+            display_cutoff = display_end_ts.to_period(params.timeframe).end_time.normalize()
 
         # Slice data up to end_date
         # We also need a start point. If not provided, show last N bars (e.g. 240)
@@ -208,9 +230,9 @@ class StockService:
         plot_df = df_display
         if len(df_display) == 1:
             single_date = df_display.index[0]
-            if timeframe == "W":
+            if params.timeframe == "W":
                 pad_offset = pd.offsets.Week(1)
-            elif timeframe == "M":
+            elif params.timeframe == "M":
                 pad_offset = pd.offsets.MonthEnd(1)
             else:
                 pad_offset = pd.offsets.BDay(1)
@@ -302,7 +324,7 @@ class StockService:
         buf = io.BytesIO()
         
         try:
-            if timeframe == "M":
+            if params.timeframe == "M":
                 datetime_format = '%Y-%m'
             else:
                 datetime_format = '%Y-%m-%d'
@@ -451,8 +473,6 @@ class StockService:
         # Determine strict end date
         if params.end_date:
             display_end = pd.to_datetime(params.end_date).date()
-        elif self.end_date:
-            display_end = pd.to_datetime(self.end_date).date()
         else:
             display_end = datetime.now().date()
 
@@ -541,7 +561,7 @@ class StockService:
         buf.seek(0)
         return buf
     
-    def get_stock_river_chart(self) -> io.BytesIO:
+    def get_stock_river_chart(self, company_symbol: str, params: StockChartQueryParams) -> io.BytesIO:
         """
         Generate stock river chart using PE ratio bands and close price.
 
@@ -553,7 +573,7 @@ class StockService:
         buf = io.BytesIO()
         
         # Get data
-        close = self.data.get("price:close")[self.company_symbol]
+        close = self.data.get("price:close")[company_symbol]
         
         # Ensure datetime index + numeric
         close.index = pd.to_datetime(close.index)

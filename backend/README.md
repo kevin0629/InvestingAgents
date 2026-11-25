@@ -34,6 +34,7 @@ pip install -r requirements.txt
 ## Run
 使用下面的指令來運作：
 ```
+cd ..
 uvicorn src.main:app --reload
 ```
 
